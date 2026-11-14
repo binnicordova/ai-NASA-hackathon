@@ -15,7 +15,7 @@ This zip file will have either one, two or three naming conventions beginning wi
 SUOMI VIIRS C2 = SV-C2
 J1 VIIRS C2 = J1V-C2
 J2 VIIRS C2 = J2V-C2
- MODIS C6.1 = M-C61
+MODIS C6.1 = M-C61
 
 Disponibilidad de datos:
 MODIS Terra: 1 de noviembre de 2000 - presente
