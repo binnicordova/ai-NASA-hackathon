@@ -23,8 +23,8 @@ Total: 28 horas de trabajo. El resto es descanso y margen.
 
 | Rol | Fases 1–3 | Fases 4–6 | Fase 7 |
 |---|---|---|---|
-| Datos y ciencia | Ingesta y armonización | Validación y página de método | Texto del método |
-| Backend | `functions/`: modelo de dominio e ingesta | Consultas de calendario y CSV | Despliegue |
+| Datos y ciencia | `armonization/`: ingesta y armonización | Validación y página de método | Texto del método |
+| Backend | `functions/`: contrato con `armonization/` y con `web/` | Servicios de calendario y CSV | Despliegue |
 | Frontend | Maqueta con datos de prueba | Mapa, calendario, exportación | Capturas |
 | Historia y diseño | Borrador de la página del proyecto | Diapositivas | Revisión final y envío |
 
@@ -64,4 +64,4 @@ No se recorta nunca: armonización validada, calendario, anomalía frente a la m
 1. Confirmar el stack ([06-arquitectura-ddd.md](06-arquitectura-ddd.md)).
 2. Pedir la `MAP_KEY` de FIRMS.
 3. Descargar el archivo de Perú, todos los sensores y años.
-4. Crear la estructura de `web/` y `functions/`.
+4. Crear la estructura de `armonization/`, `functions/` y `web/`.

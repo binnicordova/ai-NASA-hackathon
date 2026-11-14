@@ -34,7 +34,7 @@ Alerta temprana y respuesta a emergencias, científicos, gestores de tierras y b
 
 | Pedido en el enunciado | Entregable | Prioridad |
 |---|---|---|
-| Armonizar hasta que el sensor no importe | Método documentado y validado, con prueba antes/después | Crítica |
+| Armonizar hasta que el sensor no importe | `armonization/`: método documentado y validado, con prueba antes/después | Crítica |
 | App web sobre datos armonizados | `web/` | Crítica |
 | Elegir región | Dibujar área en el mapa **y** ingresar latitud/longitud | Crítica |
 | Elegir rango de fechas | Selector de fechas | Crítica |

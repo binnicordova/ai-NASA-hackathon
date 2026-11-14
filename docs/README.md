@@ -2,7 +2,7 @@
 
 NASA Space Apps Challenge 2026 · 14–15 de noviembre · cierre de envío: **domingo 15, 11:59 p. m. hora local**.
 
-Este directorio contiene el análisis del reto. El código irá en `web/` (aplicación) y `functions/` (backend), ambos con DDD.
+Este directorio contiene el análisis del reto. El código irá en `armonization/` (armonización de los datos), `functions/` (servicios que consume la web y que se conectan con la armonización) y `web/` (aplicación), con DDD.
 
 ## Índice
 
@@ -13,7 +13,7 @@ Este directorio contiene el análisis del reto. El código irá en `web/` (aplic
 | [03-datos-firms.md](03-datos-firms.md) | Fuentes de datos, columnas, límites de la API, descarga para Perú/Cusco |
 | [04-armonizacion.md](04-armonizacion.md) | Método científico para armonizar MODIS y VIIRS, y su validación |
 | [05-estrategia-ganadora.md](05-estrategia-ganadora.md) | Cómo diferenciarnos, guion de 7 diapositivas, texto base del envío |
-| [06-arquitectura-ddd.md](06-arquitectura-ddd.md) | Lenguaje ubicuo, contextos delimitados y capas para `web/` y `functions/` |
+| [06-arquitectura-ddd.md](06-arquitectura-ddd.md) | Lenguaje ubicuo, contextos delimitados y capas para `armonization/`, `functions/` y `web/` |
 | [07-plan-36h.md](07-plan-36h.md) | Cronograma por fases hasta el cierre |
 
 ## Lo esencial en cinco líneas

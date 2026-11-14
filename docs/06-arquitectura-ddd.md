@@ -3,10 +3,21 @@
 Estructura del repositorio:
 
 ```
-docs/        análisis (este directorio)
-web/         aplicación web
-functions/   backend: ingesta, armonización y consultas
+docs/           análisis (este directorio)
+armonization/   armonización: ingesta de FIRMS, grilla, calibración, validación
+functions/      servicios que consume web/ y que se conectan con armonization/
+web/            aplicación web
 ```
+
+Dirección de las dependencias:
+
+```
+web/  ──►  functions/  ──►  armonization/  ──►  FIRMS
+```
+
+- `web/` solo habla con `functions/`. Nunca lee FIRMS ni la armonización directamente.
+- `functions/` no contiene ciencia: expone servicios y delega en `armonization/`.
+- `armonization/` no sabe nada de HTTP ni de la interfaz.
 
 Este documento es una propuesta. El stack queda abierto hasta que el equipo lo confirme.
 
@@ -40,10 +51,10 @@ Los mismos términos en conversación, documentos y código.
 
 | Contexto | Responsabilidad | Vive en |
 |---|---|---|
-| **Ingesta** | Traer focos de FIRMS, traducirlos al modelo propio, limpiarlos | `functions/` |
-| **Armonización** | Grilla, celdas-día, calibración, validación | `functions/` |
-| **Calendario** | Agregar por área y fechas, mediana, anomalía, temporada pico | `functions/` y `web/` |
-| **Exportación** | CSV de focos e imágenes | `web/` y `functions/` |
+| **Ingesta** | Traer focos de FIRMS, traducirlos al modelo propio, limpiarlos | `armonization/` |
+| **Armonización** | Grilla, celdas-día, calibración, validación | `armonization/` |
+| **Calendario** | Agregar por área y fechas, mediana, anomalía, temporada pico | `functions/` (servicio) y `web/` (vista) |
+| **Exportación** | CSV de focos e imágenes | `functions/` (servicio) y `web/` (descarga) |
 | **Área de interés** | Dibujo en mapa, coordenadas, validación del área | `web/` |
 
 **Capa anticorrupción:** Ingesta es el único lugar que conoce las columnas de FIRMS (`bright_ti4`, `confidence` como letra o número). De ahí en adelante todo usa `Hotspot`.
@@ -55,14 +66,14 @@ Los mismos términos en conversación, documentos y código.
 | `domain` | Entidades, objetos de valor, servicios de dominio, puertos | Sin dependencias externas |
 | `application` | Casos de uso | Orquesta el dominio, no tiene reglas de negocio |
 | `infrastructure` | Clientes FIRMS, almacenamiento, adaptadores | Implementa los puertos |
-| `interfaces` | HTTP en `functions/`, componentes en `web/` | Solo traduce entrada y salida |
+| `interfaces` | HTTP en `functions/`, componentes en `web/`, comandos en `armonization/` | Solo traduce entrada y salida |
 
 Las dependencias apuntan hacia el dominio.
 
 ## Estructura propuesta
 
 ```
-functions/
+armonization/
   src/
     ingestion/
       domain/          Hotspot, Sensor, Confidence, HotspotSource (puerto)
@@ -72,10 +83,18 @@ functions/
       domain/          GridCell, ActiveCellDay, CalibrationFactor, HarmonizedSeries
       application/     BuildHarmonizedSeries, ValidateHarmonization
       infrastructure/  SeriesRepository
+    shared/            DateRange, BoundingBox
+    interfaces/        comandos para ejecutar ingesta, armonización y validación
+
+functions/
+  src/
     calendar/
       domain/          BurnCalendar, HistoricalMedian, Anomaly, PeakSeason
       application/     GetBurnCalendar, GetAnomaly
-      infrastructure/
+      infrastructure/  HarmonizedSeriesGateway (conexión con armonization/)
+    hotspots/
+      application/     GetHotspotsCsv, GetRecentHotspots
+      infrastructure/  HotspotsGateway (conexión con armonization/)
     shared/            DateRange, BoundingBox, Result
     interfaces/http/   getCalendar, getHotspotsCsv, getRecentHotspots
 
@@ -111,17 +130,29 @@ Estas reglas son las que conviene cubrir con pruebas unitarias.
 
 | Parte | Recomendada | Alternativa |
 |---|---|---|
-| `functions/` | **TypeScript sobre Firebase Cloud Functions** | Python si el equipo prefiere pandas para la armonización |
+| `armonization/` | **Python** (pandas o DuckDB) | TypeScript, para un solo lenguaje en todo el repositorio |
+| `functions/` | **TypeScript sobre Firebase Cloud Functions** | Python, igual que `armonization/` |
 | `web/` | **React + Vite + TypeScript** con Leaflet | Vue + Vite, o HTML y JS sin framework |
 | Datos servidos | Archivos estáticos precalculados | Base de datos si hay tiempo |
 
-Motivos de la recomendación: un solo lenguaje permite compartir el modelo de dominio entre `web/` y `functions/`, y `functions/` oculta la clave de FIRMS. NASA no restringe herramientas, así que la decisión depende de lo que el equipo domine.
+Motivos de la recomendación: `armonization/` es trabajo de ciencia de datos y Python lo resuelve más rápido; `web/` y `functions/` comparten TypeScript y tipos; y la clave de FIRMS nunca llega al navegador. NASA no restringe herramientas, así que la decisión depende de lo que el equipo domine.
 
-Si la armonización se hace en Python, se mantiene el mismo lenguaje ubicuo y se ejecuta como proceso de preparación de datos.
+## Contrato entre `armonization/` y `functions/`
+
+Hay que elegir cómo se conectan:
+
+| Opción | Cómo funciona | Cuándo conviene |
+|---|---|---|
+| **Datos precalculados** (recomendada) | `armonization/` escribe la serie armonizada y los focos limpios en un almacenamiento; `functions/` los lee | Hackathon: simple, rápido y sin cómputo pesado por petición |
+| Llamada directa | `functions/` invoca a `armonization/` como biblioteca o servicio | Si ambos usan el mismo lenguaje o se necesita armonizar bajo demanda |
+
+En los dos casos el contrato es el mismo modelo: `HarmonizedSeries` y `Hotspot`, con el lenguaje ubicuo de este documento.
 
 ## Decisiones pendientes
 
+- [ ] Lenguaje de `armonization/`.
 - [ ] Lenguaje y plataforma de `functions/`.
+- [ ] Contrato entre `armonization/` y `functions/`.
 - [ ] Framework de `web/`.
 - [ ] Tamaño de celda de la grilla.
 - [ ] Dónde se alojan los datos precalculados y la app.
