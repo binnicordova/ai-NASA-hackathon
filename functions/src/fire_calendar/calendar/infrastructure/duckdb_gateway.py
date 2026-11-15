@@ -6,6 +6,7 @@ Es el único lugar que conoce las columnas del parquet. De aquí hacia dentro to
 from __future__ import annotations
 
 import json
+import os
 from collections import OrderedDict
 from collections.abc import Iterator, Mapping
 from pathlib import Path
@@ -50,7 +51,9 @@ class DuckDbHarmonizedSeriesGateway:
     ) -> None:
         if not harmonized_parquet.exists():
             raise FileNotFoundError(f"No existe la serie armonizada: {harmonized_parquet}")
-        self._con = duckdb.connect()
+        # En contenedores, DUCKDB_MEMORY_LIMIT (p. ej. "1GB") deja margen a Python bajo el límite de la plataforma.
+        limit = os.environ.get("DUCKDB_MEMORY_LIMIT")
+        self._con = duckdb.connect(config={"memory_limit": limit} if limit else {})
         self._con.execute(
             """create table activity as
                select acq_date, h3_res6, lat_center, lon_center, department, natural_region, instrument,

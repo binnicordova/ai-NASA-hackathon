@@ -1,0 +1,12 @@
+# Lo que gcloud run deploy --source NO sube a Cloud Build (igual que .dockerignore).
+.gcloudignore
+.git
+.gitignore
+**/node_modules
+**/.venv
+**/dist
+**/__pycache__
+data/2*
+data/*.txt
+.claude
+docs/img
