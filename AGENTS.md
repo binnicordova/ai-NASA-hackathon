@@ -69,6 +69,16 @@ web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  F
 
 Se usa **DDD**: respeta el lenguaje ubicuo, los contextos delimitados y las capas de [`docs/06-arquitectura-ddd.md`](docs/06-arquitectura-ddd.md). La documentación se escribe en español.
 
+## Archivos grandes y contexto de IA
+
+Estas reglas aplican a cualquier agente, herramienta y sesión de IA que trabaje en este repositorio:
+
+- No cargues ni leas completos archivos de **10 MiB o más**, ni archivos de datos binarios como Parquet, en el contexto del chat por defecto. Esto incluye archivos de `data/`, aunque sean entradas o salidas importantes del proyecto.
+- Antes de abrir archivos de datos, consulta solo sus nombres, tamaños, esquema o metadatos. Para entender su uso, prioriza el código ETL, las funciones, la documentación y los reportes resumidos.
+- Lee o procesa el contenido de un archivo grande solo si la solicitud actual lo requiere explícitamente. En ese caso, limita la inspección a las columnas, filas, fechas o regiones necesarias; prefiere consultas y procesamiento en streaming a volcar el archivo completo al contexto.
+- Si la tarea exige el contenido completo y no se puede resolver con una inspección acotada, explica qué archivo necesitas y por qué antes de cargarlo al chat.
+- No leas datos grandes solo porque una prueba, servicio o script dependa de ellos: ejecuta la prueba o procesa los datos sin incorporar su contenido al contexto.
+
 ## Honestidad
 
 Reporta los resultados como son. Si la armonización no mejora el error, o algo no está verificado, dilo: ocultarlo cuesta más puntos que declararlo.
