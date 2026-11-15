@@ -7,6 +7,70 @@ Aplicación web con un calendario de actividad de quema sobre focos de calor de 
 web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  FIRMS
 ```
 
+## Capturas
+
+**Todo el Perú, mes en curso.** Mapa de celdas armonizadas, lectura del mes frente a su mediana, totales del rango y línea de tiempo.
+
+![Vista nacional](docs/img/01-peru.jpg)
+
+**Cusco, septiembre de 2024.** Área por departamento, rango de fechas y veredicto "por encima de lo habitual".
+
+![Cusco, septiembre de 2024](docs/img/02-cusco.jpg)
+
+**Calendario de quema con el número en cada celda.** En cursiva, los años solo-MODIS (estimados).
+
+![Calendario año × mes](docs/img/03-calendario.jpg)
+
+**Ranking de departamentos y límites declarados.**
+
+![Ranking y límites](docs/img/04-ranking-limites.jpg)
+
+## Criterios del hackathon y estado
+
+Estado al 14 de noviembre de 2026. El cierre del envío es el domingo 15 de noviembre a las 11:59 p. m.
+
+### Lo que pide el enunciado
+
+| Criterio | Estado | Dónde |
+|---|---|---|
+| Armonizar MODIS y VIIRS hasta que el sensor no importe | ✅ Cumplido | `src/etl/harmonize_firms.py`; error mensual entre sensores de 89.9 % a 15.1 % en años reservados |
+| Aplicación web sobre los datos armonizados | ✅ Cumplido en local | `web/` + `functions/`; falta desplegar |
+| Elegir región en el mapa y por coordenadas | ✅ Cumplido | Dibujar una caja, coordenadas N/S/O/E o departamento |
+| Elegir rango de fechas | ✅ Cumplido | Mes inicial y final, atajos y línea de tiempo |
+| Calendario desde inicios de los 2000 hasta hoy | ✅ Cumplido | Noviembre de 2000 a noviembre de 2026 |
+| Qué periodos del año tienen más fuego | ✅ Cumplido | Temporada pico y frecuencia por mes |
+| Qué años tuvieron más quema | ✅ Cumplido | Gráfica "Por año" |
+| Mes actual frente a la mediana histórica | ✅ Cumplido | Lectura, razón y percentil, comparando los mismos días del mes |
+| Rampas de color accesibles | ⚠️ Cumplido por diseño | Un solo tono y número en cada celda; sin probar con simulador de daltonismo |
+| CSV de los focos detectados en la búsqueda | ✅ Cumplido | "Focos de calor (CSV)", un foco por fila |
+| Descargar análisis y visualizaciones | ✅ Cumplido | CSV del análisis mensual y PNG de cada gráfica y del calendario |
+| Anomalías frente a promedios multianuales | ✅ Cumplido | Año frente a un año normal, con mediana y rango habitual |
+
+### Reglas del envío
+
+| Regla | Estado |
+|---|---|
+| Usar al menos un dato de NASA | ✅ Todo sale de NASA FIRMS |
+| Trabajo original hecho durante el hackathon | ✅ |
+| Enlace público a la app, sin registro | ❌ Pendiente: sin desplegar; el `Dockerfile` no está probado |
+| Página del proyecto con sus ocho campos | ❌ Pendiente: textos listos en [docs/08-envio.md](docs/08-envio.md) |
+| Demo de 7 diapositivas o video de 30 s | ❌ Pendiente: guion listo en [docs/08-envio.md](docs/08-envio.md) |
+| Declarar el uso de IA | ⚠️ Borrador listo; falta lo que hizo cada integrante |
+| Referencias de todo lo externo | ⚠️ Borrador listo, más abajo |
+| Equipo de seis personas como máximo | Por confirmar por el equipo |
+
+### Criterios del jurado (1 a 5 cada uno)
+
+| Criterio | Cómo lo cubre el proyecto | Estado |
+|---|---|---|
+| Impacto | Gestores de emergencias en el Perú; caso Cusco; interfaz en español | Cubierto en la app |
+| Creatividad | Armonización con incertidumbre visible, eventos de fuego por buffer y disolución, lectura en palabras del mes | Cubierto en la app |
+| Validez | Validación en años reservados y límites declarados en pantalla | Cubierto en la app |
+| Relevancia | Checklist del enunciado completo; FIRMS es todo el dato | Cubierto en la app |
+| Presentación | Depende de la página del proyecto y la demo | ❌ Sin empezar |
+
+## Estructura
+
 | Carpeta | Qué es |
 |---|---|
 | `data/` | Archivos de FIRMS y `data/processed/harmonized_fires.parquet` (serie armonizada) |
