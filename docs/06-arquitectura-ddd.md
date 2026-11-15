@@ -1,5 +1,91 @@
 # 06 · Arquitectura con DDD
 
+## Estado actual (14 nov 2026)
+
+La propuesta original de este documento se ajustó a lo que el equipo construyó. Lo que sigue es lo que hay hoy en el repositorio; las secciones posteriores conservan el lenguaje ubicuo y las reglas, que siguen vigentes.
+
+```
+data/           archivos de FIRMS y data/processed/harmonized_fires.parquet (serie armonizada)
+src/etl/        harmonize_firms.py (armonización y validación) y fire_events.py (eventos de fuego)
+functions/      servicios headless: leen la serie armonizada y responden JSON/CSV
+web/            aplicación web
+docs/           análisis (este directorio)
+```
+
+```
+web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  FIRMS
+```
+
+- `web/` solo habla con `functions/`, por HTTP. Nunca lee el parquet ni FIRMS.
+- `functions/` no armoniza: lee lo que `src/etl/` dejó en `data/processed/` y aplica las reglas del **Calendario** (mediana, anomalía, frecuencia, temporada pico, años récord).
+- `src/etl/` no sabe nada de HTTP ni de la interfaz. Lo que antes se llamaba `armonization/` es `src/etl/` más `data/`.
+
+Decisiones tomadas:
+
+| Decisión | Elegido | Motivo |
+|---|---|---|
+| Contrato `data/` → `functions/` | Datos precalculados (parquet) | Simple y sin cómputo pesado por petición |
+| `functions/` | **Python + DuckDB + FastAPI** | Mismo lenguaje que el ETL; DuckDB consulta el parquet directo, también por caja de coordenadas |
+| `web/` | **Vite + TypeScript sin framework, Leaflet** | Pocas dependencias, compila a estático |
+| Celda de la grilla | H3 resolución 6 (~36 km²) | La que produce el ETL |
+| Despliegue | Un solo servicio: `functions/` sirve también `web/dist` | Un enlace público, sin registro |
+
+### `functions/` por capas
+
+```
+functions/src/fire_calendar/
+  shared/kernel.py                      YearMonth, DateRange, BoundingBox, AreaOfInterest, DomainError
+  calendar/domain/model.py              HarmonizedSeries, MonthlyActivity, Anomaly, HistoricalMedian, PeakSeason…
+  calendar/domain/services.py           reglas puras: anomalía, frecuencia por niveles, totales anuales, temporada pico
+  calendar/domain/ports.py              HarmonizedSeriesGateway (puerto)
+  calendar/application/use_cases.py     GetBurnCalendar, GetAnomaly, GetActiveCells, GetDepartmentRanking
+  calendar/infrastructure/duckdb_gateway.py   único lugar que conoce las columnas del parquet
+  hotspots/application/export_csv.py    ExportActivityCsv
+  interfaces/http/                      FastAPI: solo traduce entrada y salida
+functions/tests/                        reglas del dominio y API contra el parquet real
+```
+
+Reglas de dominio que ya viven en el dominio y tienen prueba:
+
+- El mes en curso se compara con **los mismos días** del mes en años anteriores, no con meses completos.
+- Una `Anomaly` necesita al menos 10 años de historia para ser válida.
+- El primer y el último año son parciales y nunca entran en el ranking de años.
+- Hasta junio de 2002 (solo Terra) la actividad es de baja confianza.
+- La línea base (mediana, percentiles, frecuencia) usa los años completos desde 2003.
+- Un rango que cruza 2012 mezcla eras de sensores: los conteos crudos no son comparables dentro de él.
+
+### `web/` por contextos
+
+```
+web/src/
+  area-of-interest/domain/area.ts       AreaOfInterest, BoundingBox, validación inmediata de la caja
+  area-of-interest/ui/mapView.ts        mapa Leaflet, celdas del mes, dibujo de la caja
+  calendar/domain/types.ts              contrato con functions/
+  calendar/infrastructure/calendarApiClient.ts
+  calendar/application/calendarController.ts   selección del usuario y carga de datos
+  calendar/ui/                          línea de tiempo, calendario, gráficas, tarjetas, ranking
+  shared/                               formato, DOM, paleta, estado en la URL
+```
+
+`web/` no calcula medianas, anomalías ni niveles: llegan resueltos desde `functions/`.
+
+### API de `functions/` (GET, prefijo `/api/v1`)
+
+| Ruta | Devuelve |
+|---|---|
+| `/meta` | Fechas disponibles, departamentos, validación antes/después, límites declarados |
+| `/calendar?department=\|bbox=&from=&to=` | Serie mensual, totales por año, medianas, niveles de frecuencia, temporada pico, resumen del rango |
+| `/anomaly?…&month=AAAA-MM` | Mes frente a su mediana histórica (de igual a igual si es el mes en curso), con su lectura: por debajo, dentro, por encima o muy por encima de lo habitual |
+| `/cells?…&month=AAAA-MM` | GeoJSON de las celdas activas del mes |
+| `/ranking?from=&to=` | Departamentos en el rango |
+| `/hotspots.csv?…&from=&to=` | CSV de focos de calor, un foco por fila (lo que pide el enunciado) |
+| `/export.csv?…&from=&to=` | CSV de celdas-día activas del área y el rango, con la actividad armonizada |
+| `/calendar.csv?…&from=&to=` | El análisis en tabla: serie mensual con mediana histórica, razón y rango habitual |
+
+El área es todo el Perú (sin parámetros), un `department` o una caja `bbox=oeste,sur,este,norte`. Documentación interactiva en `/api/docs`.
+
+## Propuesta original
+
 Estructura del repositorio:
 
 ```

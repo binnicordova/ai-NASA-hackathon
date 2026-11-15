@@ -58,11 +58,12 @@ Detalle en [`docs/02-reglas-y-jurado.md`](docs/02-reglas-y-jurado.md).
 ## Estructura y forma de trabajo
 
 ```
-web/  ──►  functions/  ──►  armonization/  ──►  FIRMS
+web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  FIRMS
 ```
 
-- `armonization/`: ingesta de FIRMS y armonización. Sin HTTP ni interfaz.
-- `functions/`: servicios que consume `web/` y que se conectan con `armonization/`. Sin ciencia.
+- `data/`: archivos de FIRMS y la serie armonizada (`data/processed/harmonized_fires.parquet`), que produce `src/etl/`. Sin HTTP ni interfaz.
+- `src/etl/`: ingesta, limpieza, armonización y validación. Es la ciencia del proyecto.
+- `functions/`: servicios headless que leen la serie armonizada y responden JSON/CSV a cualquier cliente (`web/`, y a futuro `expoapp/`, `wspagent/`, `ai/`). Sin ciencia de armonización y sin interfaz.
 - `web/`: aplicación. Solo habla con `functions/`.
 - `docs/`: análisis y decisiones.
 
