@@ -47,7 +47,8 @@ export function renderHeatmap(
         type: 'button',
         title: `${monthLabel(year, month)}: ${fmt(value)} ${metricNoun(metric)}`,
         style:
-          `background:${RAMP[rampIndex(value, breaks)]};` +
+          // Un mes sin focos no lleva color de fuego: se distingue de "poca actividad".
+          `background:${value > 0 ? RAMP[rampIndex(value, breaks)] : 'var(--s1)'};` +
           (key < calendar.range.from || key > calendar.range.to ? 'opacity:.3;' : '') +
           (isSelected ? `box-shadow:0 0 0 2px ${ACCENT};` : ''),
       });
@@ -77,7 +78,7 @@ export function renderFullCalendar(table: HTMLTableElement, calendar: BurnCalend
       row.append(el('td', {
         textContent: compact(value),
         title: `${monthLabel(total.year, month)}: ${fmt(value)}${point.lowConfidence ? t('tip.lowConf') : ''}`,
-        style: `background:${RAMP[level]};color:${RAMP_INK[level]}${point.sensor === 'MODIS' ? ';font-style:italic' : ''}`,
+        style: `${value > 0 ? `background:${RAMP[level]};color:${RAMP_INK[level]}` : 'background:var(--s1)'}${point.sensor === 'MODIS' ? ';font-style:italic' : ''}`,
       }));
     }
     row.append(el('td', { textContent: compact(metricValue(total, metric)), className: 'full-total' }));

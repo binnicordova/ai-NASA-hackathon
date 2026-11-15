@@ -3,16 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Calendario de quema del Perú con focos de calor MODIS y VIIRS armonizados (NASA FIRMS), de 2000 a hoy.">
-  <title>Calendario de quema · Perú</title>
+  <meta name="description" content="NASAT: calendario de quema del Perú con focos de calor MODIS y VIIRS armonizados (NASA FIRMS), de 2000 a hoy.">
+  <title>NASAT · Calendario de quema</title>
+  <link rel="icon" type="image/png" href="/brand/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@700;900&family=Overpass:ital,wght@0,400;0,700;1,400&display=swap">
 </head>
 <body>
 <div class="app">
 
   <header class="panel top">
-    <h1 data-i18n="app.title"></h1>
-    <p class="muted hide-narrow" data-i18n="app.subtitle"></p>
-    <div class="row">
+    <div class="brand">
+      <h1><img class="brand-nasat" src="/brand/nasat.png" alt="NASAT" width="198" height="96"></h1>
+      <p class="brand-sub hide-narrow" data-i18n="app.subtitle"></p>
+    </div>
+    <div class="row top-actions">
       <div class="seg" role="group" data-i18n-aria="metric.group">
         <button type="button" data-metric="harmonized" aria-pressed="true" data-i18n="metric.harmonized" data-i18n-title="metric.harmonized.tip"></button>
         <button type="button" data-metric="hotspots" aria-pressed="false" data-i18n="metric.hotspots" data-i18n-title="metric.hotspots.tip"></button>
@@ -20,6 +26,7 @@
       </div>
       <button type="button" class="btn" id="langSwitch" data-i18n="lang.switch"></button>
     </div>
+    <a class="brand-sa" href="https://www.spaceappschallenge.org/2026/challenges/modis-and-viirs-hot-spots/" target="_blank" rel="noopener"><img src="/brand/space-apps.svg" alt="NASA Space Apps Challenge 2026" width="102" height="40"></a>
   </header>
 
   <details class="panel filters" id="filters" open>
@@ -43,12 +50,6 @@
     <div class="stack">
       <label class="sr" for="from" data-i18n="dates.start"></label><input type="month" id="from">
       <label class="sr" for="to" data-i18n="dates.end"></label><input type="month" id="to">
-    </div>
-    <div class="row wrap chips">
-      <button type="button" class="chip" data-quick="all" data-i18n="quick.all"></button>
-      <button type="button" class="chip" data-quick="5" data-i18n="quick.5"></button>
-      <button type="button" class="chip" data-quick="1" data-i18n="quick.1"></button>
-      <button type="button" class="chip" data-quick="viirs" data-i18n="quick.viirs"></button>
     </div>
 
     <p class="field" data-i18n="dl.title"></p>
@@ -146,18 +147,18 @@
     </section>
   </aside>
 
-  <section class="panel timeline">
-    <div class="row between wrap">
-      <span class="muted small row wrap"><span data-i18n="tl.hint"></span>
-        <button type="button" class="chip" id="rangeStart" data-i18n="tl.start"></button>
-        <button type="button" class="chip" id="rangeEnd" data-i18n="tl.end"></button></span>
-      <span class="muted small row wrap">
-        <span class="row"><span class="swatch modis"></span><span data-i18n="lg.modis"></span></span>
-        <span class="row"><span class="swatch viirs"></span><span data-i18n="lg.viirs"></span></span>
-        <span class="row"><span class="swatch selected"></span><span data-i18n="lg.selected"></span></span>
-      </span>
+  <section class="panel range" aria-labelledby="rangeTitle">
+    <div class="row between wrap range-head">
+      <p class="small"><span class="muted" id="rangeTitle" data-i18n="dates.label"></span> · <strong id="rangeText"></strong></p>
+      <div class="row wrap">
+        <span class="muted small hide-narrow" data-i18n="brush.hint"></span>
+        <button type="button" class="chip" data-quick="all" data-i18n="quick.all"></button>
+        <button type="button" class="chip" data-quick="5" data-i18n="quick.5"></button>
+        <button type="button" class="chip" data-quick="1" data-i18n="quick.1"></button>
+        <button type="button" class="chip" data-quick="viirs" data-i18n="quick.viirs"></button>
+      </div>
     </div>
-    <div id="timelineScroll" class="tl-scroll" tabindex="0" data-i18n-aria="tl.label"><div id="timelineTrack" class="tl-track"></div></div>
+    <div id="brush" class="brush"></div>
   </section>
 </div>
 

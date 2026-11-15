@@ -27,15 +27,17 @@ export class MapView {
     this.map = L.map(container, { preferCanvas: true, zoomControl: true, minZoom: 4, maxZoom: 11 });
     const blueMarble = L.tileLayer(
       'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg',
-      { maxNativeZoom: 8, attribution: 'Imagery: NASA GIBS, Blue Marble' },
+      { maxNativeZoom: 8, attribution: 'Imagery: NASA GIBS, Blue Marble', className: 'basemap-satellite' },
     );
     const streets = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxNativeZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
       className: 'basemap-streets',
     });
-    streets.addTo(this.map);
-    L.control.layers({ [t('map.base.streets')]: streets, [t('map.base.satellite')]: blueMarble }, {}, { position: 'topright' }).addTo(this.map);
+    // Por defecto, satélite de NASA: el mapa de calles queda como alternativa. (Las capas de referencia de GIBS
+    // en Web Mercator, nombres y fronteras, llegan opacas en negro y tapan el satélite: no se usan.)
+    blueMarble.addTo(this.map);
+    L.control.layers({ [t('map.base.satellite')]: blueMarble, [t('map.base.streets')]: streets }, {}, { position: 'topright' }).addTo(this.map);
     L.control.scale({ imperial: false }).addTo(this.map);
     this.map.attributionControl.addAttribution('Fire data: NASA FIRMS');
     this.map.fitBounds(toLatLngBounds(PERU_BOUNDS));
@@ -48,6 +50,12 @@ export class MapView {
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && this.drawing) this.stopDrawing();
     });
+  }
+
+  /** Centro y zoom actuales: la intro del globo termina justo en este encuadre. */
+  view(): { lat: number; lng: number; zoom: number } {
+    const { lat, lng } = this.map.getCenter();
+    return { lat, lng, zoom: this.map.getZoom() };
   }
 
   /** El contenedor cambió de tamaño (por ejemplo al girar el teléfono). */

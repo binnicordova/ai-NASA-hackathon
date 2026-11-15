@@ -50,11 +50,11 @@ STEPS.forEach((step, i) => {
   console.log(`  --fire-${step} ${token(`--fire-${step}`)}  ${ratio.toFixed(1)}:1`);
 });
 
-console.log('\nPasos contiguos: luminosidad L* (debe crecer) y ΔE OKLab');
+console.log('\nPasos contiguos, de poca a mucha actividad: luminosidad L* (debe bajar) y ΔE OKLab');
 for (const [name, matrix] of Object.entries(VISION)) {
   const seen = fire.map((color) => seenAs(color, matrix));
   const steps = seen.slice(1).map((color, i) => deltaE(color, seen[i]));
-  const monotonic = seen.slice(1).every((color, i) => lightness(color) > lightness(seen[i]));
+  const monotonic = seen.slice(1).every((color, i) => lightness(color) < lightness(seen[i]));
   ok &&= monotonic;
   console.log(`  ${name.padEnd(13)} L* ${seen.map((c) => lightness(c).toFixed(0)).join(' ')} · ΔE ${steps.map((d) => d.toFixed(1)).join(' ')} · mínimo ${Math.min(...steps).toFixed(1)}${monotonic ? '' : ' · NO MONÓTONA'}`);
 }
