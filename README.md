@@ -40,7 +40,7 @@ Estado al 15 de noviembre de 2026. El cierre del envío es el domingo 15 de novi
 | Criterio | Estado | Dónde |
 |---|---|---|
 | Armonizar MODIS y VIIRS hasta que el sensor no importe | ✅ Cumplido | `src/etl/harmonize_firms.py`; error mensual entre sensores de 89.9 % a 15.1 % en años reservados |
-| Aplicación web sobre los datos armonizados | ✅ Cumplido en local | `web/` + `functions/`; falta desplegar |
+| Aplicación web sobre los datos armonizados | ✅ Cumplido | `web/` + `functions/`, desplegada en Cloud Run |
 | Elegir región en el mapa y por coordenadas | ✅ Cumplido | Dibujar una caja, coordenadas N/S/O/E o departamento |
 | Elegir rango de fechas | ✅ Cumplido | Mes inicial y final, atajos y línea de tiempo |
 | Calendario desde inicios de los 2000 hasta hoy | ✅ Cumplido | Noviembre de 2000 a noviembre de 2026 |
@@ -58,7 +58,7 @@ Estado al 15 de noviembre de 2026. El cierre del envío es el domingo 15 de novi
 |---|---|
 | Usar al menos un dato de NASA | ✅ Todo sale de NASA FIRMS |
 | Trabajo original hecho durante el hackathon | ✅ |
-| Enlace público a la app, sin registro | ❌ Pendiente: sin desplegar; el `Dockerfile` no está probado |
+| Enlace público a la app, sin registro | ✅ <https://fire-calendar-538134722054.us-east1.run.app> (Cloud Run) |
 | Página del proyecto con sus ocho campos | ❌ Pendiente: textos listos en [docs/08-envio.md](docs/08-envio.md) |
 | Demo de 7 diapositivas o video de 30 s | ❌ Pendiente: guion listo en [docs/08-envio.md](docs/08-envio.md) |
 | Declarar el uso de IA | ⚠️ Borrador listo; falta lo que hizo cada integrante |
@@ -133,16 +133,34 @@ uv run --with pandas --with numpy --with scipy --with h3 --with pyarrow python s
 
 ## Desplegar
 
-El `Dockerfile` de la raíz construye la web y arranca `functions/` sirviendo ambas cosas en un solo puerto:
+**App pública:** <https://fire-calendar-538134722054.us-east1.run.app> (sin registro; `?lang=en` la abre en inglés).
 
-```bash
-docker build -t fire-calendar . && docker run --rm -p 8000:8000 fire-calendar
+Un solo contenedor en **Google Cloud Run** (proyecto `nasat-fire-calendar`, región `us-east1`). El `Dockerfile` construye la web y arranca `functions/`, que sirve la API y la web en el mismo puerto. Los datos de `data/processed/` van dentro de la imagen: cada revisión lleva el código y los datos que le corresponden, y volver atrás mueve ambos.
+
+```
+Navegador ──HTTPS──► Cloud Run "fire-calendar" (1 vCPU, 2 GiB, 0–3 instancias)
+                      uvicorn + FastAPI: /api/v1 (JSON, CSV) y / (web compilada)
+                      DuckDB en memoria ◄── data/processed/ dentro de la imagen
+Teselas del mapa: el navegador las pide directo a NASA GIBS y OpenStreetMap.
 ```
 
-- **No está probado en contenedor**: en la máquina donde se escribió no había un servicio de Docker en marcha. La ejecución local sin contenedor sí está verificada.
-- Memoria: el servicio usó unos 490 MB en una prueba con exportaciones grandes. Reservar **1 GB** (por ejemplo Cloud Run con 1 GiB, o un plan equivalente en Render o Fly.io).
-- El enlace público no debe pedir registro ni contraseña. Probarlo en una ventana privada antes de enviar.
-- La interfaz abre en español; `?lang=en` la abre en inglés.
+Probar la imagen en local:
+
+```bash
+docker build -t fire-calendar . && docker run --rm -p 8080:8080 fire-calendar
+```
+
+Publicar una nueva versión (por ejemplo, tras regenerar los datos):
+
+```bash
+gcloud run deploy fire-calendar --source . --project nasat-fire-calendar --region us-east1 --allow-unauthenticated --memory 2Gi --cpu 1 --concurrency 40 --min-instances 0 --max-instances 3 --timeout 900
+```
+
+- Arranca en ~1 s y usa ~370 MB. Tres exportaciones completas a la vez llegaron a ~1 GB, así que DuckDB queda limitado a 1 GB (`DUCKDB_MEMORY_LIMIT`) y el servicio tiene 2 GiB. Lo que no cabe se escribe a `/tmp`.
+- La exportación CSV de todos los focos (2,2 millones de filas) tarda ~3 min; el tiempo máximo por petición es de 15 min.
+- Escala a cero: tras un rato sin visitas, la primera carga tarda unos segundos más. Para una demo en vivo, `--min-instances 1` y luego volver a 0.
+- Presupuesto con alertas al 50 % y 100 % de S/ 40 al mes en la cuenta de facturación del proyecto.
+- `.gcloudignore` evita subir a Cloud Build los CSV crudos de FIRMS.
 
 ## Límites que la app declara
 

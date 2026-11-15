@@ -7,8 +7,8 @@ El formulario global está en inglés, así que los textos para pegar van en ing
 ## Antes de enviar
 
 - [ ] Todo confirmado en git y subido (`functions/`, `web/`, `src/etl/fire_events.py`, documentos).
-- [ ] App desplegada en un enlace público que abre en una ventana privada, sin registro.
-- [ ] Repositorio público (o enlace público al proyecto final).
+- [x] App desplegada en un enlace público que abre en una ventana privada, sin registro.
+- [x] Repositorio público (o enlace público al proyecto final).
 - [ ] Los ocho campos de la página, completos y guardados.
 - [ ] Demo de 7 diapositivas o video de 30 s como máximo, con enlace público.
 - [ ] Uso de IA declarado. Referencias completas.
@@ -30,7 +30,7 @@ El formulario global está en inglés, así que los textos para pegar van en ing
 
 ### 4. Link to final project
 
-`[enlace público a la app desplegada]` · `[enlace al repositorio]`
+App: <https://fire-calendar-538134722054.us-east1.run.app> · Repositorio: <https://github.com/binnicordova/ai-NASA-hackathon>
 
 ### 5. Detailed project description
 
