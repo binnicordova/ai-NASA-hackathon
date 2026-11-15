@@ -7,18 +7,25 @@
   --blue-yonder: #2e96f5; --neon-blue: #0960e1; --electric-blue: #0042a6; --deep-blue: #07173f;
   --rocket-red: #e43700; --martian-red: #8e1100; --neon-yellow: #eafe07; --white: #ffffff;
 
-  /* Rampa de fuego, de oscuro a brillante: un solo tono cálido y luminosidad siempre creciente (legible con daltonismo). */
-  --fire-1: var(--martian-red); --fire-2: #c22900; --fire-3: #e95800; --fire-4: #f19502; --fire-5: #f2c904; --fire-6: var(--neon-yellow);
+  /*
+   * Rampa de calor secuencial (tipo YlOrRd), de poca a mucha actividad: amarillo pálido → naranja → rojo → Martian Red.
+   * Es la convención de los mapas de fuego y de riesgo: rojo = más, en los dos temas. La luminosidad baja siempre
+   * de un paso al siguiente, así que el orden se lee también con daltonismo (lo comprueba `npm run check:palette`).
+   */
+  --fire-1: #fff1a8; --fire-2: #fecb5c; --fire-3: #f99a36; --fire-4: #ee6420; --fire-5: #cc2c00; --fire-6: var(--martian-red);
   /* Tinta con contraste de al menos 4,5:1 sobre cada paso. */
-  --fire-ink-1: var(--white); --fire-ink-2: var(--white); --fire-ink-3: var(--deep-blue);
-  --fire-ink-4: var(--deep-blue); --fire-ink-5: var(--deep-blue); --fire-ink-6: var(--deep-blue);
+  --fire-ink-1: var(--deep-blue); --fire-ink-2: var(--deep-blue); --fire-ink-3: var(--deep-blue);
+  --fire-ink-4: var(--deep-blue); --fire-ink-5: var(--white); --fire-ink-6: var(--white);
+  /* Degradado oficial de Space Apps: Electric Blue arriba a la izquierda → Deep Blue abajo a la derecha, a 45°. */
+  --brand-gradient: linear-gradient(135deg, var(--electric-blue) 0%, #022a78 45%, var(--deep-blue) 100%);
+  --font-head: MidDot, "Fira Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: MidDot, Overpass, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  /* Tema claro. En ambos temas, más fuego es el color más alejado del fondo: aquí la rampa va de brillante a oscuro. */
+  /* Tema claro. */
   --bg: #ecf5ff; --s1: #f5faff; --s2: var(--white); --tx: var(--deep-blue); --tx2: #425272; --tx3: #5e6d89;
   --bd: rgba(7, 23, 63, .14); --bd2: rgba(7, 23, 63, .5); --cell-outline: rgba(7, 23, 63, .18);
   --acc: var(--electric-blue); --accbg: var(--neon-blue); --on-acc: var(--white); --focus: var(--neon-blue);
   --warnbg: #f7ffc6; --warn: var(--deep-blue); --warn-edge: var(--fire-4); --errbg: #ffeae4; --err: var(--martian-red);
-  --ramp-order: reversed;
   --c-viirs: var(--rocket-red); --c-modis: var(--martian-red);
   --c-neutral: #848fa6; --c-neutral-line: var(--tx2);
   --basemap-filter: none;
@@ -28,18 +35,19 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: var(--deep-blue); --s1: #07265f; --s2: #082054; --tx: var(--white); --tx2: #c9e3ff; --tx3: #95b0dd;
-    --bd: rgba(46, 150, 245, .24); --bd2: rgba(46, 150, 245, .7); --cell-outline: rgba(255, 255, 255, .18);
+    --bd: rgba(46, 150, 245, .24); --bd2: rgba(46, 150, 245, .7); --cell-outline: rgba(255, 255, 255, .32);
     --acc: var(--blue-yonder); --focus: var(--neon-yellow);
     --warnbg: #1c3b5b; --warn: var(--white); --warn-edge: var(--neon-yellow); --errbg: var(--martian-red); --err: var(--white);
-    --ramp-order: normal;
     --c-viirs: var(--neon-yellow); --c-modis: var(--fire-3);
     /* El mapa de calles es claro: se atenúa para que las celdas brillantes sigan destacando. */
     --basemap-filter: brightness(.6) contrast(1.1) saturate(.6);
   }
 }
+/* El punto medio de Overpass queda pegado al texto que le sigue: ese solo carácter sale de una fuente del sistema. */
+@font-face { font-family: MidDot; src: local("Helvetica Neue"), local("Segoe UI"), local("Roboto"), local("Arial"); unicode-range: U+00B7; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--tx); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-h1, h2, h3 { margin: 0; font-weight: 600; }
+body { margin: 0; background: var(--bg); color: var(--tx); font: 14px/1.45 var(--font-body); }
+h1, h2, h3 { margin: 0; font-family: var(--font-head); font-weight: 700; letter-spacing: .01em; }
 h1 { font-size: 16px; } h2 { font-size: 14px; } h3 { font-size: 13px; }
 p { margin: 0; }
 button, input, select { font: inherit; color: inherit; }
@@ -47,9 +55,24 @@ button, input, select { font: inherit; color: inherit; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 .app { display: grid; grid-template-columns: 250px minmax(0, 1fr) 360px; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; padding: 8px; height: 100vh; height: 100dvh; }
-.panel { background: var(--s2); border: 1px solid var(--bd); border-radius: 12px; padding: 10px 12px; min-width: 0; }
-.top { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 8px 12px; box-shadow: inset 3px 0 0 var(--focus); }
-.timeline { grid-column: 1 / -1; padding: 8px 12px; }
+.panel { background: var(--s2); border: 1px solid var(--bd); border-radius: 12px; padding: 10px 12px; min-width: 0; box-shadow: 0 1px 2px rgba(7, 23, 63, .06), 0 6px 18px rgba(7, 23, 63, .05); }
+.top { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 6px 14px; background: var(--brand-gradient); color: var(--white); border: 0; box-shadow: 0 6px 20px rgba(7, 23, 63, .22); }
+/* La cabecera va siempre sobre el degradado de marca, en los dos temas: el logo NASAT tiene texto blanco. */
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.brand h1 { line-height: 0; flex: none; }
+.brand-nasat { height: 46px; width: auto; display: block; }
+.brand-sub { color: #c9e3ff; font-size: 12px; max-width: 440px; padding-left: 14px; border-left: 1px solid rgba(255, 255, 255, .28); }
+.top-actions { gap: 10px; margin-left: auto; }
+/* Logo oficial sin alterar, con su zona de resguardo. */
+.brand-sa { display: block; flex: none; padding: 4px 0 4px 14px; border-left: 1px solid rgba(255, 255, 255, .28); }
+.brand-sa img { height: 40px; width: auto; display: block; }
+.top :focus-visible { outline-color: var(--neon-yellow); }
+.top .seg { border-color: rgba(255, 255, 255, .45); }
+.top .seg button { color: #dbeaff; }
+.top .seg button[aria-pressed="true"] { background: var(--white); color: var(--electric-blue); }
+.top .btn { background: transparent; color: var(--white); border-color: rgba(255, 255, 255, .45); }
+.top .btn:hover { background: rgba(255, 255, 255, .12); }
+.range { grid-column: 1 / -1; padding: 8px 14px 6px; overflow-x: clip; }
 .filters, .stats { overflow-y: auto; }
 .filters > summary { cursor: pointer; list-style: none; }
 .filters > summary::-webkit-details-marker { display: none; }
@@ -85,11 +108,17 @@ input, select { height: 32px; width: 100%; min-width: 0; border: 1px solid var(-
 #map .leaflet-popup-close-button { color: var(--tx2); }
 #map .leaflet-control-attribution, #map .leaflet-control-scale-line { background: color-mix(in srgb, var(--s2) 82%, transparent); color: var(--tx2); border-color: var(--tx3); }
 #map .leaflet-control-attribution a { color: var(--acc); }
+/* Intro del globo: cubre el mapa y se funde con él al terminar. */
+.globe-intro { position: absolute; inset: 0; z-index: 1100; background: var(--deep-blue); transition: opacity .45s ease; cursor: pointer; }
+.globe-intro.leaving { opacity: 0; pointer-events: none; }
+.globe-canvas { display: block; width: 100%; height: 100%; }
+.globe-caption { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); color: #c9e3ff; font-size: 12px; letter-spacing: .04em; white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.globe-intro .globe-skip { position: absolute; right: 12px; top: 12px; background: rgba(7, 23, 63, .6); color: var(--white); border-color: rgba(255, 255, 255, .45); }
 .map-legend, .map-hint, .status { position: absolute; z-index: 500; font-size: 12px; padding: 6px 10px; }
 .map-legend { left: 10px; bottom: 26px; max-width: 240px; } .map-hint { left: 50%; top: 10px; transform: translateX(-50%); }
 .status { right: 10px; bottom: 26px; }
 
-.verdict { font-size: 15px; font-weight: 600; margin: 6px 0 2px; padding: 6px 10px; border-radius: var(--r); background: var(--s1); border-left: 4px solid var(--tx3); }
+.verdict { font-family: var(--font-head); font-size: 15px; font-weight: 700; margin: 6px 0 2px; padding: 6px 10px; border-radius: var(--r); background: var(--s1); border-left: 4px solid var(--tx3); }
 .verdict[data-category="above"] { border-left-color: var(--fire-4); }
 .verdict[data-category="well_above"] { border-left-color: var(--rocket-red); background: var(--errbg); color: var(--err); }
 .verdict[data-category="below"] { border-left-color: var(--acc); }
@@ -97,7 +126,7 @@ input, select { height: 32px; width: 100%; min-width: 0; border: 1px solid var(-
 .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 6px 0; }
 .kpi { background: var(--s1); border-radius: var(--r); padding: 6px 8px; min-width: 0; }
 .kpi span { display: block; font-size: 12px; color: var(--tx2); }
-.kpi b { display: block; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpi b { display: block; font-family: var(--font-head); font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .card { border: 1px solid var(--bd); border-radius: var(--r); padding: 8px; margin-top: 10px; }
 .card.plain { border: 0; padding: 0; margin-top: 14px; }
 .card svg { display: block; width: 100%; height: auto; color: var(--tx3); margin: 4px 0; }
@@ -108,7 +137,7 @@ input, select { height: 32px; width: 100%; min-width: 0; border: 1px solid var(-
 .swatch.viirs { background: var(--c-viirs); } .swatch.modis { background: var(--c-modis); } .swatch.selected { background: var(--acc); } .swatch.usual { background: var(--c-neutral); opacity: .45; }
 .ramp { gap: 1px; } .ramp span { width: 14px; height: 10px; border-radius: 2px; }
 /* El paso más bajo de la rampa casi se funde con el fondo: un filo fino lo separa de una celda vacía. */
-.ramp span, .cal-cell, .tl-bar, .full-cal td:not(.full-empty, .full-total) { box-shadow: inset 0 0 0 1px var(--cell-outline); }
+.ramp span, .cal-cell, .full-cal td:not(.full-empty, .full-total) { box-shadow: inset 0 0 0 1px var(--cell-outline); }
 
 .cal { display: grid; grid-template-columns: 34px repeat(12, minmax(0, 1fr)); gap: 1px; font-size: 11px; color: var(--tx3); margin-top: 6px; }
 .cal > * { height: 12px; border-radius: 2px; }
@@ -123,12 +152,23 @@ input, select { height: 32px; width: 100%; min-width: 0; border: 1px solid var(-
 .ranking td, .ranking th { padding: 3px 4px; font-variant-numeric: tabular-nums; }
 #caveats { margin: 6px 0; padding-left: 18px; }
 
-.tl-scroll { overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; margin-top: 4px; }
-.tl-track { display: flex; align-items: flex-end; gap: 6px; width: max-content; }
-.tl-year { display: flex; flex-direction: column; gap: 2px; }
-.tl-bars { display: flex; align-items: flex-end; gap: 1px; height: 54px; }
-.tl-bar { width: 7px; border-radius: 2px 2px 0 0; cursor: pointer; flex: none; border: 0; padding: 0; }
-.tl-label { font-size: 11px; color: var(--tx3); border-top: 1px solid var(--bd); padding-top: 1px; }
+/* Selector de rango tipo brush: la actividad mensual de fondo y una ventana que acerca el periodo. */
+.range-head { gap: 8px; }
+.brush { margin-top: 6px; --brush-fill: color-mix(in srgb, var(--acc) 55%, transparent); }
+.brush-track { position: relative; height: 52px; border-radius: var(--r); background: var(--s1); cursor: crosshair; touch-action: none; user-select: none; }
+.brush-chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.brush-chart path { fill: var(--brush-fill); }
+.brush-dim { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--s2) 62%, transparent); pointer-events: none; }
+.brush-window { position: absolute; top: 0; bottom: 0; border: 2px solid var(--acc); border-radius: 6px; cursor: grab; box-shadow: 0 0 0 1px color-mix(in srgb, var(--s2) 70%, transparent); }
+.dragging .brush-window { cursor: grabbing; }
+.brush-handle { position: absolute; top: 50%; width: 12px; height: 30px; margin-top: -15px; border-radius: 4px; background: var(--acc); cursor: ew-resize; touch-action: none; }
+.brush-handle:first-child { left: -7px; } .brush-handle:last-child { right: -7px; }
+.brush-handle::after { content: ""; position: absolute; inset: 9px 4px; border-left: 1px solid var(--on-acc); border-right: 1px solid var(--on-acc); opacity: .8; }
+.brush-cursor { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--rocket-red); pointer-events: none; }
+.brush-era { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--c-neutral-line); padding: 2px 0 0 4px; font-size: 10px; color: var(--tx2); white-space: nowrap; pointer-events: none; }
+.brush-tip { position: absolute; top: 4px; transform: translateX(-50%); background: var(--tx); color: var(--bg); font-size: 11px; padding: 1px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; z-index: 1; }
+.brush-axis { position: relative; height: 16px; font-size: 11px; color: var(--tx3); font-variant-numeric: tabular-nums; }
+.brush-axis span { position: absolute; top: 1px; transform: translateX(-50%); }
 
 dialog { border: 1px solid var(--bd); border-radius: 12px; background: var(--s2); color: var(--tx); padding: 14px 16px; width: min(960px, 96vw); max-height: 92vh; }
 dialog::backdrop { background: rgba(7, 23, 63, .6); }
@@ -145,7 +185,10 @@ dialog::backdrop { background: rgba(7, 23, 63, .6); }
 @media (max-width: 639px) {
   .app { grid-template-columns: minmax(0, 1fr); }
   .hide-narrow { display: none; }
-  .map-wrap { min-height: 320px; } .stats { max-height: none; order: 4; } .timeline { order: 3; }
-  input, select, .btn, .seg button, .btn.mini { min-height: 44px; } .tl-bar { width: 9px; } .cal > * { height: 16px; }
+  /* Cabecera en el teléfono: los dos logos arriba y los controles debajo, a todo el ancho. */
+  .brand { order: 1; } .brand-sa { order: 2; margin-left: auto; border-left: 0; } .brand-sa img { height: 34px; }
+  .top-actions { order: 3; width: 100%; margin-left: 0; } .top-actions .seg { flex: 1; } .top-actions .seg button { flex: 1; padding: 6px; }
+  .map-wrap { min-height: 320px; } .stats { max-height: none; order: 4; } .range { order: 3; }
+  input, select, .btn, .seg button, .btn.mini { min-height: 44px; } .brush-track { height: 60px; } .brush-handle { width: 18px; height: 40px; margin-top: -20px; } .cal > * { height: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

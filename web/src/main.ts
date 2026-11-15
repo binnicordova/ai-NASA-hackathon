@@ -7,7 +7,7 @@ import { metricLabel, metricValue, type BurnCalendar, type CellCollection, type 
 import { renderBeforeAfter, renderFrequencyChart, renderYearDetail, renderYearsChart } from './calendar/ui/charts';
 import { renderFullCalendar, renderHeatmap } from './calendar/ui/heatmap';
 import { renderAbout, renderLevelLegend, renderMonthCard, renderRangeCard, renderRanking, renderStatus } from './calendar/ui/panels';
-import { Timeline } from './calendar/ui/timeline';
+import { RangeBrush } from './calendar/ui/rangeBrush';
 import { byId, el } from './shared/dom';
 import { downloadCalendarPng, downloadSvgAsPng, safeFilename, type CalendarImage } from './shared/exportPng';
 import { compact, monthKey, monthLabel } from './shared/format';
@@ -27,7 +27,10 @@ const map = new MapView(
     byId('drawHint').hidden = !active;
   },
 );
-const timeline = new Timeline(byId('timelineScroll'), byId('timelineTrack'), (year, month) => void controller.selectMonth(year, month));
+const brush = new RangeBrush(byId('brush'), byId('rangeText'), {
+  onRange: (from, to) => void controller.setRange(from, to),
+  onSelect: (year, month) => void controller.selectMonth(year, month),
+});
 
 // --- área ------------------------------------------------------------------
 
@@ -81,14 +84,6 @@ document.querySelectorAll<HTMLButtonElement>('[data-quick]').forEach((button) =>
     void controller.setRange(start, end);
   }),
 );
-byId('rangeStart').addEventListener('click', () => {
-  const m = controller.selection.month;
-  if (m) void controller.setRange(monthKey(m.year, m.month), controller.selection.to);
-});
-byId('rangeEnd').addEventListener('click', () => {
-  const m = controller.selection.month;
-  if (m) void controller.setRange(controller.selection.from, monthKey(m.year, m.month));
-});
 
 // --- medida, año inspeccionado, calendario ampliado ---------------------------
 
@@ -195,7 +190,7 @@ function render(selection: Selection, data: ViewData, changed: { area: boolean; 
   renderRangeCard(calendar, selection.area, selection.metric);
   renderMonthCard(calendar, data.anomaly, selection.metric, selection.month);
   renderLevelLegend(calendar);
-  timeline.render(calendar, selection.metric, selection.month);
+  brush.render(calendar, selection.metric, selection.month);
   renderHeatmap(byId('heatmap'), calendar, selection.metric, selection.month, {
     onSelect: (year, month) => void controller.selectMonth(year, month),
     onYear: (year) => controller.inspectYear(year),
@@ -235,4 +230,26 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => loca
 window.addEventListener('resize', () => map.resize());
 // Un enlace compartido pegado en la misma pestaña cambia solo el fragmento: se aplica sin recargar.
 window.addEventListener('hashchange', () => void controller.restore(readUrlState()));
-void controller.start(readUrlState());
+const initialState = readUrlState();
+void controller.start(initialState);
+
+// --- intro: la Tierra en 3D gira y se acerca a Perú ------------------------------
+// Solo en la primera visita de la sesión, sin un área concreta en el enlace y sin "reducir movimiento".
+const INTRO_KEY = 'nasat-intro-seen';
+function introSeen(): boolean {
+  try {
+    return sessionStorage.getItem(INTRO_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+if (!initialState.area && !introSeen() && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  try {
+    sessionStorage.setItem(INTRO_KEY, '1');
+  } catch {
+    /* sin almacenamiento: la intro puede repetirse, no pasa nada */
+  }
+  import('./area-of-interest/ui/globeIntro')
+    .then(({ playGlobeIntro }) => playGlobeIntro(document.querySelector<HTMLElement>('.map-wrap')!, map.view()))
+    .catch(() => document.querySelector('.globe-intro')?.remove()); // sin la intro, el mapa ya está listo debajo
+}

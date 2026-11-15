@@ -5,14 +5,14 @@ import { cssToken } from './dom';
  * si el sistema cambia de tema, `main.ts` recarga la página.
  */
 const FIRE_STEPS = [1, 2, 3, 4, 5, 6];
-const lowToHigh = <T>(steps: T[]): T[] => (cssToken('--ramp-order') === 'reversed' ? steps.reverse() : steps);
 
-/** Rampa secuencial de poco a mucho fuego: el valor más alto es el color más alejado del fondo. */
-export const RAMP: readonly string[] = lowToHigh(FIRE_STEPS.map((step) => cssToken(`--fire-${step}`)));
-/** Cómo se ve cada extremo de la rampa en el tema activo, para describirla con palabras. */
-export const [LOW_TONE, HIGH_TONE] = lowToHigh<'dark' | 'light'>(['dark', 'light']);
+/** Rampa de calor secuencial de poco a mucho fuego (amarillo pálido → rojo oscuro), igual en los dos temas. */
+export const RAMP: readonly string[] = FIRE_STEPS.map((step) => cssToken(`--fire-${step}`));
+/** Cómo se ve cada extremo de la rampa, para describirla con palabras. */
+export const LOW_TONE = 'light' as const;
+export const HIGH_TONE = 'dark' as const;
 /** Tinta legible sobre cada paso de la rampa. */
-export const RAMP_INK: readonly string[] = lowToHigh(FIRE_STEPS.map((step) => cssToken(`--fire-ink-${step}`)));
+export const RAMP_INK: readonly string[] = FIRE_STEPS.map((step) => cssToken(`--fire-ink-${step}`));
 /** Los cuatro niveles de actividad usan pasos alternos de la misma rampa. */
 export const LEVEL_COLORS: readonly string[] = [0, 2, 3, 5].map((step) => RAMP[step]!);
 export const ACCENT = cssToken('--acc');

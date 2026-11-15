@@ -27,7 +27,7 @@ La interfaz usa la paleta de NASA Space Apps y sigue el tema claro u oscuro del 
 
 ![Ranking y límites](docs/img/04-ranking-limites.jpg)
 
-**Tema claro, para uso en campo.** La misma vista de Cusco: la rampa usa los mismos colores en sentido inverso, de modo que más fuego es siempre el color más alejado del fondo.
+**Tema claro, para uso en campo.** La misma vista de Cusco: la rampa es la misma en los dos temas, de amarillo pálido (poca actividad) a rojo oscuro (mucha).
 
 ![Cusco en tema claro](docs/img/05-tema-claro.jpg)
 
@@ -47,7 +47,7 @@ Estado al 15 de noviembre de 2026. El cierre del envío es el domingo 15 de novi
 | Qué periodos del año tienen más fuego | ✅ Cumplido | Temporada pico y frecuencia por mes |
 | Qué años tuvieron más quema | ✅ Cumplido | Gráfica "Por año" |
 | Mes actual frente a la mediana histórica | ✅ Cumplido | Lectura, razón y percentil, comparando los mismos días del mes |
-| Rampas de color accesibles | ✅ Cumplido | Rampa cálida de un solo tono, de luminosidad siempre creciente, y número en cada celda. Comprobada con simulación de daltonismo (`npm --prefix web run check:palette`), no con personas |
+| Rampas de color accesibles | ✅ Cumplido | Rampa de calor secuencial amarillo → rojo (rojo = más, igual en los dos temas), de luminosidad siempre decreciente, y número en cada celda. Comprobada con simulación de daltonismo (`npm --prefix web run check:palette`), no con personas |
 | CSV de los focos detectados en la búsqueda | ✅ Cumplido | "Focos de calor (CSV)", un foco por fila |
 | Descargar análisis y visualizaciones | ✅ Cumplido | CSV del análisis mensual y PNG de cada gráfica y del calendario |
 | Anomalías frente a promedios multianuales | ✅ Cumplido | Año frente a un año normal, con mediana y rango habitual |
@@ -174,11 +174,12 @@ gcloud run deploy fire-calendar --source . --project nasat-fire-calendar --regio
 
 ## Para la página del proyecto
 
-**Datos de NASA:** FIRMS (Fire Information for Resource Management System): MODIS Collection 6.1 (Terra, Aqua) y VIIRS Collection 2 (S-NPP, NOAA-20, NOAA-21), archivo y casi tiempo real, Perú, noviembre de 2000 a noviembre de 2026. Imagen de fondo opcional del mapa: NASA GIBS, Blue Marble.
+**Datos de NASA:** FIRMS (Fire Information for Resource Management System): MODIS Collection 6.1 (Terra, Aqua) y VIIRS Collection 2 (S-NPP, NOAA-20, NOAA-21), archivo y casi tiempo real, Perú, noviembre de 2000 a noviembre de 2026. Mapa base por defecto y globo 3D de la intro: NASA GIBS, Blue Marble.
 
 **Referencias externas (código y datos):**
 
 - Leaflet (BSD-2-Clause) · mapa
+- Logo oficial de NASA Space Apps, sin alterar, y paleta, degradado y tipografías de su guía de marca · Fira Sans y Overpass (SIL OFL, Google Fonts)
 - OpenStreetMap (ODbL) · teselas del mapa base
 - DuckDB (MIT) · consultas sobre el parquet
 - FastAPI (MIT), Uvicorn (BSD-3-Clause) · servicio HTTP
@@ -186,4 +187,4 @@ gcloud run deploy fire-calendar --source . --project nasat-fire-calendar --regio
 - pandas, NumPy, SciPy (BSD-3-Clause), PyArrow (Apache-2.0) · ETL
 - Vite (MIT), TypeScript (Apache-2.0) · compilación de la web
 
-**Uso de IA:** se usó Claude (Anthropic), mediante Claude Code, para analizar el enunciado y las reglas, revisar la serie armonizada, escribir `src/etl/fire_events.py`, `functions/` y `web/`, y redactar documentación. El equipo descargó los datos de FIRMS, construyó la armonización (`src/etl/harmonize_firms.py`) y revisó los resultados. Completar con el uso real de cada integrante antes de enviar.
+**Uso de IA:** se usó Claude (Anthropic), mediante Claude Code, para analizar el enunciado y las reglas, revisar la serie armonizada, escribir `src/etl/fire_events.py`, `functions/` y `web/`, y redactar documentación. El equipo descargó los datos de FIRMS, construyó la armonización (`src/etl/harmonize_firms.py`) y revisó los resultados. El logo de NASAT se generó con una herramienta de IA de imágenes (indicar cuál). Completar con el uso real de cada integrante antes de enviar.
