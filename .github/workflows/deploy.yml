@@ -1,0 +1,81 @@
+# Publica la app en Cloud Run cuando un PR fusionado a main cambia algo que va dentro de la imagen.
+# Autenticación sin claves: GitHub OIDC + Workload Identity Federation (ver "Despliegue continuo" en el README).
+name: Desplegar en Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - .gcloudignore
+      - functions/**
+      - web/**
+      - data/processed/**
+      - .github/workflows/deploy.yml
+  workflow_dispatch:
+
+# Un despliegue a la vez; si llega otro merge, espera al anterior en vez de cancelarlo.
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: nasat-fire-calendar
+  REGION: us-east1
+  SERVICE: fire-calendar
+  WIF_PROVIDER: projects/538134722054/locations/global/workloadIdentityPools/github/providers/github-oidc
+  DEPLOY_SA: github-deployer@nasat-fire-calendar.iam.gserviceaccount.com
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Pruebas de functions/
+        working-directory: functions
+        run: uv run --frozen pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Tipos de web/
+        working-directory: web
+        run: npm ci && npm run typecheck
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # Mismos parámetros que el despliegue manual del README. Sin --allow-unauthenticated:
+      # el servicio ya es público y gcloud conserva esa política.
+      - name: Desplegar
+        run: |
+          gcloud run deploy "$SERVICE" --source . \
+            --project "$PROJECT_ID" --region "$REGION" \
+            --memory 2Gi --cpu 1 --concurrency 40 \
+            --min-instances 0 --max-instances 3 --timeout 900 \
+            --labels "commit-sha=${GITHUB_SHA::12}" \
+            --quiet
+
+      - name: Comprobar el servicio publicado
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
+          curl --fail --silent --show-error --retry 3 "$URL/" -o /dev/null
+          curl --fail --silent --show-error --retry 3 "$URL/api/v1/meta" | head -c 200
+          echo
+          echo "### Publicado en $URL (commit ${GITHUB_SHA::12})" >> "$GITHUB_STEP_SUMMARY"

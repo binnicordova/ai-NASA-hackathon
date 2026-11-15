@@ -162,6 +162,32 @@ gcloud run deploy fire-calendar --source . --project nasat-fire-calendar --regio
 - Presupuesto con alertas al 50 % y 100 % de S/ 40 al mes en la cuenta de facturación del proyecto.
 - `.gcloudignore` evita subir a Cloud Build los CSV crudos de FIRMS.
 
+### Despliegue continuo
+
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) publica una revisión nueva cada vez que llega a `main` un cambio en `Dockerfile`, `.gcloudignore`, `functions/`, `web/`, `data/processed/` o el propio workflow. Primero corre las pruebas de `functions/` y el chequeo de tipos de `web/`; si fallan, no despliega. Después del despliegue comprueba que `/` y `/api/v1/meta` respondan. También se puede lanzar a mano desde la pestaña Actions ("Run workflow").
+
+GitHub entra a Google Cloud sin claves guardadas: el token OIDC del workflow se cambia por credenciales cortas de la cuenta de servicio `github-deployer` (Workload Identity Federation). El proveedor solo acepta tokens de este repositorio y de la rama `main`. La cuenta tiene los permisos mínimos para desplegar desde código fuente: `roles/run.sourceDeveloper`, `roles/serviceusage.serviceUsageConsumer` y `roles/iam.serviceAccountUser` sobre la cuenta con la que corre el servicio.
+
+Configuración única (ya hecha; sirve para rehacerla en otro proyecto):
+
+```bash
+PROJECT=nasat-fire-calendar; NUM=538134722054; REPO=binnicordova/ai-NASA-hackathon
+SA=github-deployer@$PROJECT.iam.gserviceaccount.com
+gcloud services enable sts.googleapis.com iamcredentials.googleapis.com --project $PROJECT
+gcloud iam service-accounts create github-deployer --project $PROJECT --display-name "GitHub Actions: despliegue a Cloud Run"
+for ROLE in roles/run.sourceDeveloper roles/serviceusage.serviceUsageConsumer; do
+  gcloud projects add-iam-policy-binding $PROJECT --member "serviceAccount:$SA" --role $ROLE --condition None
+done
+gcloud iam service-accounts add-iam-policy-binding $NUM-compute@developer.gserviceaccount.com --project $PROJECT --member "serviceAccount:$SA" --role roles/iam.serviceAccountUser
+gcloud iam workload-identity-pools create github --project $PROJECT --location global --display-name "GitHub Actions"
+gcloud iam workload-identity-pools providers create-oidc github-oidc --project $PROJECT --location global --workload-identity-pool github \
+  --issuer-uri https://token.actions.githubusercontent.com \
+  --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
+  --attribute-condition "assertion.repository == '$REPO' && assertion.ref == 'refs/heads/main'"
+gcloud iam service-accounts add-iam-policy-binding $SA --project $PROJECT --role roles/iam.workloadIdentityUser \
+  --member "principalSet://iam.googleapis.com/projects/$NUM/locations/global/workloadIdentityPools/github/attribute.repository/$REPO"
+```
+
 ## Límites que la app declara
 
 - Un foco de calor es una detección térmica, no un incendio confirmado.
