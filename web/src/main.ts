@@ -13,7 +13,7 @@ import { downloadCalendarPng, downloadSvgAsPng, safeFilename, type CalendarImage
 import { compact, monthKey, monthLabel } from './shared/format';
 import { lang, monthNames, setLang, t, translateDocument, type Key } from './shared/i18n';
 import { areaLabel } from './area-of-interest/domain/area';
-import { RAMP, RAMP_INK, quantileBreaks, rampIndex } from './shared/palette';
+import { HIGH_TONE, LOW_TONE, RAMP, RAMP_INK, quantileBreaks, rampIndex } from './shared/palette';
 import { readUrlState, writeUrlState } from './shared/urlState';
 
 const controller = new CalendarController();
@@ -221,7 +221,7 @@ function render(selection: Selection, data: ViewData, changed: { area: boolean; 
     const legend = byId('mapLegend');
     legend.hidden = false;
     legend.textContent = extent
-      ? t('map.legend', { month: text, n: data.cells.features.length, what: t(selection.metric === 'harmonized' ? 'map.what.harmonized' : 'map.what.raw'), lo: compact(extent.low), hi: compact(extent.high) })
+      ? t('map.legend', { month: text, n: data.cells.features.length, what: t(selection.metric === 'harmonized' ? 'map.what.harmonized' : 'map.what.raw'), lo: compact(extent.low), hi: compact(extent.high), loTone: t(`tone.${LOW_TONE}`), hiTone: t(`tone.${HIGH_TONE}`) })
       : t('map.empty', { month: text });
   }
   if (changed.area && changed.month) map.focusArea(selection.area);
@@ -230,6 +230,8 @@ function render(selection: Selection, data: ViewData, changed: { area: boolean; 
 
 translateDocument();
 controller.subscribe(render);
+// Los colores se leen del tema activo al cargar: si el sistema cambia de tema, se recarga. La vista está en la URL.
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload());
 window.addEventListener('resize', () => map.resize());
 // Un enlace compartido pegado en la misma pestaña cambia solo el fragmento: se aplica sin recargar.
 window.addEventListener('hashchange', () => void controller.restore(readUrlState()));

@@ -32,6 +32,7 @@ export class MapView {
     const streets = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxNativeZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
+      className: 'basemap-streets',
     });
     streets.addTo(this.map);
     L.control.layers({ [t('map.base.streets')]: streets, [t('map.base.satellite')]: blueMarble }, {}, { position: 'topright' }).addTo(this.map);
