@@ -1,8 +1,13 @@
 /** Descarga de visualizaciones como PNG, hechas en el navegador (sin enviar nada a un servidor). */
 
+import { cssToken } from './dom';
+
 const SCALE = 3; // resolución suficiente para pegar la imagen en un informe o una diapositiva
-const INK = '#1a1a19';
-const MUTED = '#55544f';
+// La imagen lleva los colores del tema activo: lo que se descarga es lo que se ve.
+const SURFACE = cssToken('--s2');
+const INK = cssToken('--tx');
+const MUTED = cssToken('--tx2');
+const GRID = cssToken('--bd');
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 function save(canvas: HTMLCanvasElement, filename: string): void {
@@ -34,10 +39,10 @@ export async function downloadSvgAsPng(svg: SVGElement, title: string, caption: 
     node.setAttribute('font-family', FONT);
     if (!node.getAttribute('style')?.includes('fill')) node.setAttribute('fill', MUTED);
   });
-  clone.querySelectorAll('.grid').forEach((node) => node.setAttribute('stroke', '#d9d8d2'));
+  clone.querySelectorAll('.grid').forEach((node) => node.setAttribute('stroke', GRID));
   clone.querySelectorAll('.hit').forEach((node) => node.remove());
-  // Las variables de tema no existen fuera de la página: se fijan a los valores del tema claro.
-  const markup = new XMLSerializer().serializeToString(clone).replace(/var\(--tx2\)/g, MUTED).replace(/var\(--s2\)/g, '#ffffff');
+  // Las variables de tema no existen fuera de la página: se sustituyen por su valor.
+  const markup = new XMLSerializer().serializeToString(clone).replace(/var\((--[\w-]+)\)/g, (_, name: string) => cssToken(name));
 
   const image = new Image();
   await new Promise<void>((resolve, reject) => {
@@ -56,7 +61,7 @@ export async function downloadSvgAsPng(svg: SVGElement, title: string, caption: 
   canvas.height = (top + height + bottom) * SCALE;
   const ctx = canvas.getContext('2d')!;
   ctx.scale(SCALE, SCALE);
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = SURFACE;
   ctx.fillRect(0, 0, width + pad * 2, top + height + bottom);
   ctx.fillStyle = INK;
   ctx.font = `600 13px ${FONT}`;
@@ -111,7 +116,7 @@ export function downloadCalendarPng(data: CalendarImage, filename: string): void
   canvas.height = height * SCALE;
   const ctx = canvas.getContext('2d')!;
   ctx.scale(SCALE, SCALE);
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = SURFACE;
   ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = INK;
   ctx.font = `600 16px ${FONT}`;

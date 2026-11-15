@@ -9,6 +9,8 @@ web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  F
 
 ## Capturas
 
+La interfaz usa la paleta de NASA Space Apps y sigue el tema claro u oscuro del dispositivo. Las primeras cuatro capturas son del tema oscuro.
+
 **Todo el Perú, mes en curso.** Mapa de celdas armonizadas, lectura del mes frente a su mediana, totales del rango y línea de tiempo.
 
 ![Vista nacional](docs/img/01-peru.jpg)
@@ -25,9 +27,13 @@ web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  F
 
 ![Ranking y límites](docs/img/04-ranking-limites.jpg)
 
+**Tema claro, para uso en campo.** La misma vista de Cusco: la rampa usa los mismos colores en sentido inverso, de modo que más fuego es siempre el color más alejado del fondo.
+
+![Cusco en tema claro](docs/img/05-tema-claro.jpg)
+
 ## Criterios del hackathon y estado
 
-Estado al 14 de noviembre de 2026. El cierre del envío es el domingo 15 de noviembre a las 11:59 p. m.
+Estado al 15 de noviembre de 2026. El cierre del envío es el domingo 15 de noviembre a las 11:59 p. m.
 
 ### Lo que pide el enunciado
 
@@ -41,7 +47,7 @@ Estado al 14 de noviembre de 2026. El cierre del envío es el domingo 15 de novi
 | Qué periodos del año tienen más fuego | ✅ Cumplido | Temporada pico y frecuencia por mes |
 | Qué años tuvieron más quema | ✅ Cumplido | Gráfica "Por año" |
 | Mes actual frente a la mediana histórica | ✅ Cumplido | Lectura, razón y percentil, comparando los mismos días del mes |
-| Rampas de color accesibles | ⚠️ Cumplido por diseño | Un solo tono y número en cada celda; sin probar con simulador de daltonismo |
+| Rampas de color accesibles | ✅ Cumplido | Rampa cálida de un solo tono, de luminosidad siempre creciente, y número en cada celda. Comprobada con simulación de daltonismo (`npm --prefix web run check:palette`), no con personas |
 | CSV de los focos detectados en la búsqueda | ✅ Cumplido | "Focos de calor (CSV)", un foco por fila |
 | Descargar análisis y visualizaciones | ✅ Cumplido | CSV del análisis mensual y PNG de cada gráfica y del calendario |
 | Anomalías frente a promedios multianuales | ✅ Cumplido | Año frente a un año normal, con mediana y rango habitual |
@@ -67,7 +73,7 @@ Estado al 14 de noviembre de 2026. El cierre del envío es el domingo 15 de novi
 | Creatividad | Armonización con incertidumbre visible, eventos de fuego por buffer y disolución, lectura en palabras del mes | Cubierto en la app |
 | Validez | Validación en años reservados y límites declarados en pantalla | Cubierto en la app |
 | Relevancia | Checklist del enunciado completo; FIRMS es todo el dato | Cubierto en la app |
-| Presentación | Depende de la página del proyecto y la demo | ❌ Sin empezar |
+| Presentación | Interfaz con la paleta de NASA Space Apps, en tema claro y oscuro. El resto depende de la página del proyecto y la demo | ⚠️ Interfaz lista; página y demo sin empezar |
 
 ## Estructura
 

@@ -4,6 +4,16 @@ export function byId<T extends HTMLElement = HTMLElement>(id: string): T {
   return node as T;
 }
 
+/**
+ * Valor de un token de color de `styles.css`, ya resuelto para el tema activo.
+ * Canvas y Leaflet necesitan el valor: no aceptan `var(--…)`.
+ */
+export function cssToken(name: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!value) throw new Error(`Falta el token ${name}`);
+  return value;
+}
+
 type ElementProps<K extends keyof HTMLElementTagNameMap> = Omit<Partial<HTMLElementTagNameMap[K]>, 'style'> & { style?: string };
 
 export function el<K extends keyof HTMLElementTagNameMap>(

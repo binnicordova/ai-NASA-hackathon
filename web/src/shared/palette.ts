@@ -1,12 +1,25 @@
-/** Rampa secuencial de un solo tono (clara → oscura): legible con daltonismo. */
-export const RAMP = ['#FAEEDA', '#FAC775', '#EF9F27', '#BA7517', '#854F0B', '#633806'] as const;
-export const RAMP_INK = ['#633806', '#633806', '#412402', '#FAEEDA', '#FAEEDA', '#FAEEDA'] as const;
-export const LEVEL_COLORS = ['#FAEEDA', '#FAC775', '#BA7517', '#633806'] as const;
-export const ACCENT = '#185FA5';
-export const NEUTRAL = '#B4B2A9';
-export const NEUTRAL_LINE = '#888780';
-export const MODIS_ERA = '#FAC775';
-export const VIIRS_ERA = '#BA7517';
+import { cssToken } from './dom';
+
+/**
+ * Colores de datos del tema activo. Se declaran en `styles.css` y aquí solo se leen, una vez al cargar:
+ * si el sistema cambia de tema, `main.ts` recarga la página.
+ */
+const FIRE_STEPS = [1, 2, 3, 4, 5, 6];
+const lowToHigh = <T>(steps: T[]): T[] => (cssToken('--ramp-order') === 'reversed' ? steps.reverse() : steps);
+
+/** Rampa secuencial de poco a mucho fuego: el valor más alto es el color más alejado del fondo. */
+export const RAMP: readonly string[] = lowToHigh(FIRE_STEPS.map((step) => cssToken(`--fire-${step}`)));
+/** Cómo se ve cada extremo de la rampa en el tema activo, para describirla con palabras. */
+export const [LOW_TONE, HIGH_TONE] = lowToHigh<'dark' | 'light'>(['dark', 'light']);
+/** Tinta legible sobre cada paso de la rampa. */
+export const RAMP_INK: readonly string[] = lowToHigh(FIRE_STEPS.map((step) => cssToken(`--fire-ink-${step}`)));
+/** Los cuatro niveles de actividad usan pasos alternos de la misma rampa. */
+export const LEVEL_COLORS: readonly string[] = [0, 2, 3, 5].map((step) => RAMP[step]!);
+export const ACCENT = cssToken('--acc');
+export const NEUTRAL = cssToken('--c-neutral');
+export const NEUTRAL_LINE = cssToken('--c-neutral-line');
+export const MODIS_ERA = cssToken('--c-modis');
+export const VIIRS_ERA = cssToken('--c-viirs');
 
 /** Cortes por cuantiles para repartir los valores en la rampa. */
 export function quantileBreaks(values: number[], quantiles = [0.3, 0.5, 0.7, 0.85, 0.95]): number[] {

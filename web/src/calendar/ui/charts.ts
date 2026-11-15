@@ -1,6 +1,6 @@
 import { compact, fmt, monthLabel, niceMax } from '../../shared/format';
 import { monthNames, t, type Key } from '../../shared/i18n';
-import { ACCENT, LEVEL_COLORS, NEUTRAL, NEUTRAL_LINE, VIIRS_ERA } from '../../shared/palette';
+import { ACCENT, LEVEL_COLORS, MODIS_ERA, NEUTRAL, NEUTRAL_LINE, VIIRS_ERA } from '../../shared/palette';
 import { metricNoun, metricValue, type BurnCalendar, type Metric, type YearTotal } from '../domain/types';
 
 // Todas las gráficas comparten el mismo lienzo: 324 de ancho, eje Y a la izquierda.
@@ -95,7 +95,7 @@ export function renderYearsChart(
     html += `<rect class="hit" x="${(X0 + index * band).toFixed(1)}" y="${top}" width="${band.toFixed(1)}" height="${bottom - top}" data-year="${year.year}"><title>${year.year}: ${fmt(value(year))} ${metricNoun(metric)}${extra}</title></rect>`;
   });
   if (metric === 'harmonized') html += `<line x1="${X0}" x2="${X1}" y1="${Y(median)}" y2="${Y(median)}" stroke="${NEUTRAL_LINE}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
-  if (metric === 'events' && modisLine.length) html += `<polyline fill="none" stroke="#633806" stroke-width="2" points="${modisLine.join(' ')}"/>`;
+  if (metric === 'events' && modisLine.length) html += `<polyline fill="none" stroke="${MODIS_ERA}" stroke-width="2" points="${modisLine.join(' ')}"/>`;
   svg.innerHTML = html;
   svg.querySelectorAll<SVGRectElement>('.hit').forEach((hit) => hit.addEventListener('click', () => onYear(Number(hit.dataset.year))));
 

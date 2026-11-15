@@ -56,7 +56,7 @@ El formulario global está en inglés, así que los textos para pegar van en ing
 
 ### 8. Space agency partner and other data · References
 
-> Leaflet (BSD-2-Clause); OpenStreetMap map tiles (ODbL, © OpenStreetMap contributors); DuckDB (MIT); FastAPI (MIT); Uvicorn (BSD-3-Clause); H3 by Uber (Apache-2.0); pandas, NumPy and SciPy (BSD-3-Clause); PyArrow (Apache-2.0); Vite (MIT); TypeScript (Apache-2.0). `[Añadir aquí cualquier imagen, fuente o dato externo usado en las diapositivas.]`
+> Leaflet (BSD-2-Clause); OpenStreetMap map tiles (ODbL, © OpenStreetMap contributors); DuckDB (MIT); FastAPI (MIT); Uvicorn (BSD-3-Clause); H3 by Uber (Apache-2.0); pandas, NumPy and SciPy (BSD-3-Clause); PyArrow (Apache-2.0); Vite (MIT); TypeScript (Apache-2.0). Colour palette: NASA Space Apps Challenge brand colours. Colour-blindness simulation used to check the colour ramp: Machado, Oliveira & Fernandes (2009), "A Physiologically-based Model for Simulation of Color Vision Deficiency", IEEE TVCG 15(6); perceptual distances in the OKLab colour space (Ottosson, 2020). `[Añadir aquí cualquier imagen, fuente o dato externo usado en las diapositivas.]`
 
 ## Demo: 7 diapositivas
 
@@ -85,9 +85,22 @@ Si se elige video (30 s como máximo): 5 s el salto de 2012 con "Focos crudos"; 
 | Qué periodos tienen más fuego | "Temporada pico" y "Con qué frecuencia cada mes es activo" |
 | Qué años tuvieron más quema | "Por año", con los tres años completos más altos |
 | Mes actual frente a la mediana histórica | Lectura en palabras, razón y percentil del mes elegido |
-| Rampas de color accesibles | Un solo tono de claro a oscuro, números en la vista ampliada, textos y signos además del color |
+| Rampas de color accesibles | Un solo tono cálido (rojo marciano a amarillo neón, paleta de Space Apps) con luminosidad siempre creciente; números en la vista ampliada, textos y signos además del color |
 | CSV de los focos detectados | "Focos de calor (CSV)", un foco por fila |
 | Descargar análisis y visualizaciones | "Análisis mensual (CSV)", "Actividad armonizada (CSV)" y botón PNG en cada gráfica y en el calendario |
 | Anomalías frente a promedios multianuales | "… frente a un año normal", con mediana y rango habitual |
 
-Pendiente y fuera de lo que cubre el código: probar la rampa con un simulador de daltonismo, y el nivel de provincia y distrito (necesita límites oficiales).
+**Rampa y temas.** La aplicación sigue el tema claro u oscuro del dispositivo, con la paleta de NASA Space Apps. Los seis colores de la rampa son los mismos en ambos temas y solo cambia el sentido: más fuego es siempre el color más alejado del fondo (el más oscuro en el tema claro, el más brillante en el oscuro), y la leyenda "menos → más" está en cada vista.
+
+Comprobación numérica (`npm --prefix web run check:palette`), hecha por simulación y no con personas:
+
+| Visión | Luminosidad L* de los seis pasos | ΔE (OKLab) entre pasos contiguos |
+|---|---|---|
+| Normal | 30, 43, 56, 70, 82, 95 | 11.8 a 13.3 |
+| Protanopía | 22, 34, 48, 65, 80, 93 | 10.3 a 14.5 |
+| Deuteranopía | 34, 48, 61, 73, 84, 94 | 9.1 a 12.1 |
+| Tritanopía | 32, 45, 56, 68, 81, 95 | 9.8 a 13.1 |
+
+El número de cada celda tiene un contraste de 4.9:1 o más. Límite conocido: el paso más bajo de la rampa casi se funde con el fondo (1.1:1 en el tema claro, 1.7:1 en el oscuro), por eso las celdas con dato llevan un filo fino que las separa de las vacías.
+
+Pendiente y fuera de lo que cubre el código: probar la rampa con personas con daltonismo, y el nivel de provincia y distrito (necesita límites oficiales).
