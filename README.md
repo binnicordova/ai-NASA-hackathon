@@ -1,0 +1,165 @@
+# Calendario de quema · Perú
+
+Proyecto del reto **Harmonization of MODIS and VIIRS Hot Spots** (NASA Space Apps Challenge 2026).
+Aplicación web con un calendario de actividad de quema sobre focos de calor de MODIS y VIIRS armonizados (NASA FIRMS), para el área y el rango de fechas que elige el usuario.
+
+```
+web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  FIRMS
+```
+
+## Capturas
+
+**Todo el Perú, mes en curso.** Mapa de celdas armonizadas, lectura del mes frente a su mediana, totales del rango y línea de tiempo.
+
+![Vista nacional](docs/img/01-peru.jpg)
+
+**Cusco, septiembre de 2024.** Área por departamento, rango de fechas y veredicto "por encima de lo habitual".
+
+![Cusco, septiembre de 2024](docs/img/02-cusco.jpg)
+
+**Calendario de quema con el número en cada celda.** En cursiva, los años solo-MODIS (estimados).
+
+![Calendario año × mes](docs/img/03-calendario.jpg)
+
+**Ranking de departamentos y límites declarados.**
+
+![Ranking y límites](docs/img/04-ranking-limites.jpg)
+
+## Criterios del hackathon y estado
+
+Estado al 14 de noviembre de 2026. El cierre del envío es el domingo 15 de noviembre a las 11:59 p. m.
+
+### Lo que pide el enunciado
+
+| Criterio | Estado | Dónde |
+|---|---|---|
+| Armonizar MODIS y VIIRS hasta que el sensor no importe | ✅ Cumplido | `src/etl/harmonize_firms.py`; error mensual entre sensores de 89.9 % a 15.1 % en años reservados |
+| Aplicación web sobre los datos armonizados | ✅ Cumplido en local | `web/` + `functions/`; falta desplegar |
+| Elegir región en el mapa y por coordenadas | ✅ Cumplido | Dibujar una caja, coordenadas N/S/O/E o departamento |
+| Elegir rango de fechas | ✅ Cumplido | Mes inicial y final, atajos y línea de tiempo |
+| Calendario desde inicios de los 2000 hasta hoy | ✅ Cumplido | Noviembre de 2000 a noviembre de 2026 |
+| Qué periodos del año tienen más fuego | ✅ Cumplido | Temporada pico y frecuencia por mes |
+| Qué años tuvieron más quema | ✅ Cumplido | Gráfica "Por año" |
+| Mes actual frente a la mediana histórica | ✅ Cumplido | Lectura, razón y percentil, comparando los mismos días del mes |
+| Rampas de color accesibles | ⚠️ Cumplido por diseño | Un solo tono y número en cada celda; sin probar con simulador de daltonismo |
+| CSV de los focos detectados en la búsqueda | ✅ Cumplido | "Focos de calor (CSV)", un foco por fila |
+| Descargar análisis y visualizaciones | ✅ Cumplido | CSV del análisis mensual y PNG de cada gráfica y del calendario |
+| Anomalías frente a promedios multianuales | ✅ Cumplido | Año frente a un año normal, con mediana y rango habitual |
+
+### Reglas del envío
+
+| Regla | Estado |
+|---|---|
+| Usar al menos un dato de NASA | ✅ Todo sale de NASA FIRMS |
+| Trabajo original hecho durante el hackathon | ✅ |
+| Enlace público a la app, sin registro | ❌ Pendiente: sin desplegar; el `Dockerfile` no está probado |
+| Página del proyecto con sus ocho campos | ❌ Pendiente: textos listos en [docs/08-envio.md](docs/08-envio.md) |
+| Demo de 7 diapositivas o video de 30 s | ❌ Pendiente: guion listo en [docs/08-envio.md](docs/08-envio.md) |
+| Declarar el uso de IA | ⚠️ Borrador listo; falta lo que hizo cada integrante |
+| Referencias de todo lo externo | ⚠️ Borrador listo, más abajo |
+| Equipo de seis personas como máximo | Por confirmar por el equipo |
+
+### Criterios del jurado (1 a 5 cada uno)
+
+| Criterio | Cómo lo cubre el proyecto | Estado |
+|---|---|---|
+| Impacto | Gestores de emergencias en el Perú; caso Cusco; interfaz en español | Cubierto en la app |
+| Creatividad | Armonización con incertidumbre visible, eventos de fuego por buffer y disolución, lectura en palabras del mes | Cubierto en la app |
+| Validez | Validación en años reservados y límites declarados en pantalla | Cubierto en la app |
+| Relevancia | Checklist del enunciado completo; FIRMS es todo el dato | Cubierto en la app |
+| Presentación | Depende de la página del proyecto y la demo | ❌ Sin empezar |
+
+## Estructura
+
+| Carpeta | Qué es |
+|---|---|
+| `data/` | Archivos de FIRMS y `data/processed/harmonized_fires.parquet` (serie armonizada) |
+| `src/etl/` | `harmonize_firms.py` (armonización y validación) y `fire_events.py` (eventos de fuego por buffer y disolución diaria) |
+| `functions/` | Servicios headless (Python, DuckDB, FastAPI): JSON y CSV para cualquier cliente |
+| `web/` | Aplicación (Vite, TypeScript, Leaflet). Solo habla con `functions/` |
+| `docs/` | Análisis del reto, método y arquitectura ([docs/06-arquitectura-ddd.md](docs/06-arquitectura-ddd.md)) |
+
+## Ejecutar
+
+Requisitos: [uv](https://docs.astral.sh/uv/) y Node 20 o superior.
+
+Todo en un solo servidor (la API sirve también la web compilada):
+
+```bash
+npm --prefix web install && npm --prefix web run build
+```
+
+```bash
+cd functions && uv run uvicorn --factory fire_calendar.interfaces.http.app:create_app --port 8000
+```
+
+Abrir <http://localhost:8000>. La API queda en `/api/v1` y su documentación en `/api/docs`.
+
+Para desarrollar la web con recarga automática, dejar la API en el puerto 8000 y en otra terminal:
+
+```bash
+npm --prefix web run dev
+```
+
+## Pruebas
+
+```bash
+cd functions && uv run pytest
+```
+
+```bash
+npm --prefix web run typecheck
+```
+
+Las pruebas de `functions/` cubren las reglas del dominio y la API contra el parquet real.
+
+## Regenerar los datos
+
+```bash
+uv run --with pandas --with numpy --with h3 --with pyarrow python src/etl/harmonize_firms.py
+```
+
+```bash
+uv run --with pandas --with numpy --with scipy --with h3 --with pyarrow python src/etl/fire_events.py
+```
+
+`fire_events.py` escribe `fire_events.parquet` (eventos de fuego) y `hotspots_clean.parquet` (focos limpios, uno por fila, para la descarga CSV de focos). Ambos son opcionales: sin ellos la app funciona, muestra los eventos como no disponibles y oculta la descarga de focos.
+
+## Desplegar
+
+El `Dockerfile` de la raíz construye la web y arranca `functions/` sirviendo ambas cosas en un solo puerto:
+
+```bash
+docker build -t fire-calendar . && docker run --rm -p 8000:8000 fire-calendar
+```
+
+- **No está probado en contenedor**: en la máquina donde se escribió no había un servicio de Docker en marcha. La ejecución local sin contenedor sí está verificada.
+- Memoria: el servicio usó unos 490 MB en una prueba con exportaciones grandes. Reservar **1 GB** (por ejemplo Cloud Run con 1 GiB, o un plan equivalente en Render o Fly.io).
+- El enlace público no debe pedir registro ni contraseña. Probarlo en una ventana privada antes de enviar.
+- La interfaz abre en español; `?lang=en` la abre en inglés.
+
+## Límites que la app declara
+
+- Un foco de calor es una detección térmica, no un incendio confirmado.
+- Sin observación (nubes, humo) no significa cero fuego.
+- Un evento de fuego es un grupo de focos cuyos buffers se tocan el mismo día; un incendio de varios días cuenta una vez por día.
+- Los focos crudos y los eventos no son comparables entre años; la actividad armonizada sí.
+- Antes de mediados de 2002 solo volaba Terra: esos valores son de baja confianza.
+- Los departamentos se asignan con contornos aproximados.
+- La app describe; no predice incendios.
+
+## Para la página del proyecto
+
+**Datos de NASA:** FIRMS (Fire Information for Resource Management System): MODIS Collection 6.1 (Terra, Aqua) y VIIRS Collection 2 (S-NPP, NOAA-20, NOAA-21), archivo y casi tiempo real, Perú, noviembre de 2000 a noviembre de 2026. Imagen de fondo opcional del mapa: NASA GIBS, Blue Marble.
+
+**Referencias externas (código y datos):**
+
+- Leaflet (BSD-2-Clause) · mapa
+- OpenStreetMap (ODbL) · teselas del mapa base
+- DuckDB (MIT) · consultas sobre el parquet
+- FastAPI (MIT), Uvicorn (BSD-3-Clause) · servicio HTTP
+- H3 de Uber (Apache-2.0) · grilla hexagonal
+- pandas, NumPy, SciPy (BSD-3-Clause), PyArrow (Apache-2.0) · ETL
+- Vite (MIT), TypeScript (Apache-2.0) · compilación de la web
+
+**Uso de IA:** se usó Claude (Anthropic), mediante Claude Code, para analizar el enunciado y las reglas, revisar la serie armonizada, escribir `src/etl/fire_events.py`, `functions/` y `web/`, y redactar documentación. El equipo descargó los datos de FIRMS, construyó la armonización (`src/etl/harmonize_firms.py`) y revisó los resultados. Completar con el uso real de cada integrante antes de enviar.
