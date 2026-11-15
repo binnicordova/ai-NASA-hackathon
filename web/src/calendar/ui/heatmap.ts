@@ -1,0 +1,87 @@
+import { el } from '../../shared/dom';
+import { compact, fmt, monthKey, monthLabel } from '../../shared/format';
+import { monthNames, t } from '../../shared/i18n';
+import { ACCENT, RAMP, RAMP_INK, quantileBreaks, rampIndex } from '../../shared/palette';
+import { metricNoun, metricValue, type BurnCalendar, type Metric, type MonthPoint } from '../domain/types';
+
+interface Handlers {
+  onSelect: (year: number, month: number) => void;
+  onYear: (year: number) => void;
+}
+
+function indexByMonth(calendar: BurnCalendar): Map<string, MonthPoint> {
+  return new Map(calendar.series.map((p) => [monthKey(p.year, p.month), p]));
+}
+
+/** Calendario de quema compacto (año × mes). El número de cada celda está en la vista ampliada. */
+export function renderHeatmap(
+  container: HTMLElement,
+  calendar: BurnCalendar,
+  metric: Metric,
+  selected: { year: number; month: number } | null,
+  handlers: Handlers,
+): void {
+  const breaks = quantileBreaks(calendar.series.map((p) => metricValue(p, metric)));
+  const points = indexByMonth(calendar);
+  const firstYear = calendar.series[0]!.year;
+  const lastYear = calendar.series.at(-1)!.year;
+  container.replaceChildren(el('div'), ...monthNames().map((m) => el('div', { className: 'cal-head', textContent: m[0]!.toUpperCase() })));
+
+  for (let year = firstYear; year <= lastYear; year += 1) {
+    if (year === 2012) container.append(el('div', { className: 'cal-divider', title: t('cal.divider') }));
+    const label = el('button', { className: 'cal-year', type: 'button', textContent: year % 2 === 0 ? String(year) : '', title: t('cal.inspect', { year }) });
+    label.setAttribute('aria-label', t('cal.inspect', { year }));
+    label.addEventListener('click', () => handlers.onYear(year));
+    container.append(label);
+    for (let month = 1; month <= 12; month += 1) {
+      const key = monthKey(year, month);
+      const point = points.get(key);
+      if (!point) {
+        container.append(el('div', { className: 'cal-empty' }));
+        continue;
+      }
+      const value = metricValue(point, metric);
+      const isSelected = selected?.year === year && selected.month === month;
+      const cell = el('button', {
+        className: 'cal-cell',
+        type: 'button',
+        title: `${monthLabel(year, month)}: ${fmt(value)} ${metricNoun(metric)}`,
+        style:
+          `background:${RAMP[rampIndex(value, breaks)]};` +
+          (key < calendar.range.from || key > calendar.range.to ? 'opacity:.3;' : '') +
+          (isSelected ? `box-shadow:0 0 0 2px ${ACCENT};` : ''),
+      });
+      cell.setAttribute('aria-label', cell.title);
+      cell.addEventListener('click', () => handlers.onSelect(year, month));
+      container.append(cell);
+    }
+  }
+}
+
+/** Vista ampliada: tabla con el número en cada celda, para no depender solo del color. */
+export function renderFullCalendar(table: HTMLTableElement, calendar: BurnCalendar, metric: Metric): void {
+  const breaks = quantileBreaks(calendar.series.map((p) => metricValue(p, metric)));
+  const points = indexByMonth(calendar);
+  const head = el('tr', {}, el('th', { textContent: t('cal.year'), scope: 'col' }), ...monthNames().map((m) => el('th', { textContent: m, scope: 'col' })), el('th', { textContent: t('cal.total'), scope: 'col' }));
+  const body = el('tbody');
+  for (const total of calendar.years) {
+    const row = el('tr', {}, el('th', { textContent: `${total.year}${total.partial ? ' *' : ''}`, scope: 'row' }));
+    for (let month = 1; month <= 12; month += 1) {
+      const point = points.get(monthKey(total.year, month));
+      if (!point) {
+        row.append(el('td', { textContent: '', className: 'full-empty' }));
+        continue;
+      }
+      const value = metricValue(point, metric);
+      const level = rampIndex(value, breaks);
+      row.append(el('td', {
+        textContent: compact(value),
+        title: `${monthLabel(total.year, month)}: ${fmt(value)}${point.lowConfidence ? t('tip.lowConf') : ''}`,
+        style: `background:${RAMP[level]};color:${RAMP_INK[level]}${point.sensor === 'MODIS' ? ';font-style:italic' : ''}`,
+      }));
+    }
+    row.append(el('td', { textContent: compact(metricValue(total, metric)), className: 'full-total' }));
+    body.append(row);
+  }
+  table.replaceChildren(el('thead', {}, head), body);
+}

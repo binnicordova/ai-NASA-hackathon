@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Calendario de quema del Perú con focos de calor MODIS y VIIRS armonizados (NASA FIRMS), de 2000 a hoy.">
+  <title>Calendario de quema · Perú</title>
+</head>
+<body>
+<div class="app">
+
+  <header class="panel top">
+    <h1 data-i18n="app.title"></h1>
+    <p class="muted hide-narrow" data-i18n="app.subtitle"></p>
+    <div class="row">
+      <div class="seg" role="group" data-i18n-aria="metric.group">
+        <button type="button" data-metric="harmonized" aria-pressed="true" data-i18n="metric.harmonized" data-i18n-title="metric.harmonized.tip"></button>
+        <button type="button" data-metric="hotspots" aria-pressed="false" data-i18n="metric.hotspots" data-i18n-title="metric.hotspots.tip"></button>
+        <button type="button" data-metric="events" aria-pressed="false" data-i18n="metric.events" data-i18n-title="metric.events.tip"></button>
+      </div>
+      <button type="button" class="btn" id="langSwitch" data-i18n="lang.switch"></button>
+    </div>
+  </header>
+
+  <details class="panel filters" id="filters" open>
+    <summary><h2 data-i18n="filters.title"></h2></summary>
+
+    <label class="field" for="department" data-i18n="area.label"></label>
+    <select id="department"><option value="" data-i18n="area.country"></option></select>
+
+    <p class="field" data-i18n="area.own"></p>
+    <button type="button" class="btn full" id="draw" aria-pressed="false" data-i18n="area.draw"></button>
+    <form id="coords" class="coords" novalidate>
+      <label><span data-i18n="area.north"></span><input id="north" inputmode="decimal" placeholder="-11.2" autocomplete="off"></label>
+      <label><span data-i18n="area.south"></span><input id="south" inputmode="decimal" placeholder="-15.5" autocomplete="off"></label>
+      <label><span data-i18n="area.west"></span><input id="west" inputmode="decimal" placeholder="-74.0" autocomplete="off"></label>
+      <label><span data-i18n="area.east"></span><input id="east" inputmode="decimal" placeholder="-70.3" autocomplete="off"></label>
+      <button type="submit" class="btn full" data-i18n="area.use"></button>
+    </form>
+    <p class="note error" id="coordsError" role="alert" hidden></p>
+
+    <p class="field" data-i18n="dates.label"></p>
+    <div class="stack">
+      <label class="sr" for="from" data-i18n="dates.start"></label><input type="month" id="from">
+      <label class="sr" for="to" data-i18n="dates.end"></label><input type="month" id="to">
+    </div>
+    <div class="row wrap chips">
+      <button type="button" class="chip" data-quick="all" data-i18n="quick.all"></button>
+      <button type="button" class="chip" data-quick="5" data-i18n="quick.5"></button>
+      <button type="button" class="chip" data-quick="1" data-i18n="quick.1"></button>
+      <button type="button" class="chip" data-quick="viirs" data-i18n="quick.viirs"></button>
+    </div>
+
+    <p class="field" data-i18n="dl.title"></p>
+    <a class="btn full" id="dlHotspots" href="#" download data-i18n="dl.hotspots"></a>
+    <p class="muted small" data-i18n="dl.hotspots.hint"></p>
+    <a class="btn full gap" id="dlCells" href="#" download data-i18n="dl.cells"></a>
+    <p class="muted small" data-i18n="dl.cells.hint"></p>
+    <a class="btn full gap" id="dlSeries" href="#" download data-i18n="dl.series"></a>
+    <p class="muted small" data-i18n="dl.series.hint"></p>
+    <p class="muted small gap" data-i18n="dl.images"></p>
+  </details>
+
+  <main class="map-wrap">
+    <div id="map" data-i18n-aria="map.label"></div>
+    <div class="map-legend panel" id="mapLegend" hidden></div>
+    <p class="map-hint panel" id="drawHint" hidden data-i18n="map.hint"></p>
+    <p class="status panel" id="status" role="status" hidden></p>
+  </main>
+
+  <aside class="panel stats">
+    <p class="muted"><span data-i18n="month.title"></span> · <strong id="monthLabel"></strong></p>
+    <p class="verdict" id="verdict" hidden></p>
+    <div class="kpis">
+      <div class="kpi"><span id="monthValueLabel"></span><b id="monthValue">–</b></div>
+      <div class="kpi"><span data-i18n="kpi.ratio"></span><b id="monthRatio">–</b></div>
+      <div class="kpi"><span data-i18n="kpi.percentile"></span><b id="monthPercentile">–</b></div>
+    </div>
+    <p class="note" id="monthNote" hidden></p>
+
+    <div class="row between section"><h2 data-i18n="range.title"></h2><span class="chip static" id="unitChip"></span></div>
+    <p class="muted"><strong id="scopeLabel"></strong> · <span id="rangeLabel"></span></p>
+    <div class="kpis">
+      <div class="kpi"><span data-i18n="kpi.hotspots"></span><b id="rangeHotspots">–</b></div>
+      <div class="kpi"><span data-i18n="kpi.events"></span><b id="rangeEvents">–</b></div>
+      <div class="kpi"><span data-i18n="kpi.harmonized"></span><b id="rangeHarmonized">–</b></div>
+    </div>
+    <p class="muted small" id="peakSeason"></p>
+    <p class="note" id="rangeNote" hidden></p>
+    <details class="muted small"><summary data-i18n="kpi.events"></summary><p data-i18n="event.def"></p></details>
+
+    <section class="card">
+      <div class="row between"><h3 data-i18n="freq.title"></h3><button type="button" class="btn mini" data-png="frequencyChart" data-png-title="freq.title" data-png-text="frequencyText" data-i18n="png" data-i18n-title="png.tip"></button></div>
+      <svg id="frequencyChart" viewBox="0 0 324 150" role="img" data-i18n-aria="freq.title"></svg>
+      <p class="muted small row wrap" id="levelLegend"></p>
+      <p class="small" id="frequencyText"></p>
+      <p class="muted small" data-i18n="freq.note"></p>
+    </section>
+
+    <section class="card">
+      <div class="row between"><h3><span data-i18n="years.title"></span> <span class="muted" id="yearsUnit"></span></h3><button type="button" class="btn mini" data-png="yearsChart" data-png-title="years.title" data-png-text="yearsText" data-i18n="png" data-i18n-title="png.tip"></button></div>
+      <svg id="yearsChart" viewBox="0 0 324 160" role="img" data-i18n-aria="years.title"></svg>
+      <p class="muted small" id="yearsText"></p>
+    </section>
+
+    <section class="card">
+      <div class="row between">
+        <h3 id="yearDetailTitle"></h3>
+        <span class="row"><button type="button" class="btn icon" id="yearPrev" data-i18n-aria="detail.prev">‹</button><button type="button" class="btn icon" id="yearNext" data-i18n-aria="detail.next">›</button><button type="button" class="btn mini" data-png="yearDetailChart" data-png-title-id="yearDetailTitle" data-png-text="yearDetailText" data-i18n="png" data-i18n-title="png.tip"></button></span>
+      </div>
+      <svg id="yearDetailChart" viewBox="0 0 324 150" role="img" aria-labelledby="yearDetailTitle"></svg>
+      <p class="muted small row wrap">
+        <span class="row"><span class="swatch line" style="background:#BA7517"></span><span data-i18n="lg.thisYear"></span></span>
+        <span class="row"><span class="swatch dash"></span><span data-i18n="lg.median"></span></span>
+        <span class="row"><span class="swatch" style="background:#B4B2A9;opacity:.45"></span><span data-i18n="lg.usual"></span></span>
+      </p>
+      <p class="small" id="yearDetailText"></p>
+    </section>
+
+    <section class="card plain">
+      <div class="row between"><h3 data-i18n="cal.title"></h3><span class="row"><button type="button" class="btn mini" id="calendarPng" data-i18n="png" data-i18n-title="png.tip"></button><button type="button" class="btn mini" id="expand" data-i18n="cal.numbers"></button></span></div>
+      <div class="cal" id="heatmap" role="group" data-i18n-aria="cal.title"></div>
+      <p class="muted small row wrap"><span data-i18n="cal.low"></span> <span class="row ramp" id="ramp"></span> <span data-i18n="cal.high"></span>
+        <span class="row"><span class="swatch dash brown"></span><span data-i18n="cal.modis"></span></span></p>
+    </section>
+
+    <section class="card">
+      <div class="row between"><h3 data-i18n="ba.title"></h3><button type="button" class="btn mini" data-png="beforeAfterChart" data-png-title="ba.title" data-png-text="validationText" data-i18n="png" data-i18n-title="png.tip"></button></div>
+      <svg id="beforeAfterChart" viewBox="0 0 324 190" role="img" data-i18n-aria="ba.title"></svg>
+      <p class="muted small" id="validationText"></p>
+    </section>
+
+    <section class="card">
+      <div class="row between"><h3 data-i18n="rank.title"></h3><span class="muted small" id="rankingSort"></span></div>
+      <table class="ranking">
+        <thead><tr><th scope="col">#</th><th scope="col" data-i18n="rank.dept"></th><th scope="col" data-i18n="rank.hotspots"></th><th scope="col" data-i18n="rank.events"></th><th scope="col" data-i18n="rank.activity"></th></tr></thead>
+        <tbody id="rankingBody"></tbody>
+      </table>
+      <p class="muted small" data-i18n="rank.note"></p>
+    </section>
+
+    <section class="card plain">
+      <h3 data-i18n="about.title"></h3>
+      <ul class="muted small" id="caveats"></ul>
+      <p class="muted small" id="source"></p>
+    </section>
+  </aside>
+
+  <section class="panel timeline">
+    <div class="row between wrap">
+      <span class="muted small row wrap"><span data-i18n="tl.hint"></span>
+        <button type="button" class="chip" id="rangeStart" data-i18n="tl.start"></button>
+        <button type="button" class="chip" id="rangeEnd" data-i18n="tl.end"></button></span>
+      <span class="muted small row wrap">
+        <span class="row"><span class="swatch" style="background:#FAC775"></span><span data-i18n="lg.modis"></span></span>
+        <span class="row"><span class="swatch" style="background:#BA7517"></span><span data-i18n="lg.viirs"></span></span>
+        <span class="row"><span class="swatch" style="background:#185FA5"></span><span data-i18n="lg.selected"></span></span>
+      </span>
+    </div>
+    <div id="timelineScroll" class="tl-scroll" tabindex="0" data-i18n-aria="tl.label"><div id="timelineTrack" class="tl-track"></div></div>
+  </section>
+</div>
+
+<dialog id="calendarDialog" aria-labelledby="calendarDialogTitle">
+  <div class="row between"><h2 id="calendarDialogTitle"></h2><span class="row"><button type="button" class="btn" id="calendarPngDialog" data-i18n="png" data-i18n-title="png.tip"></button><form method="dialog"><button class="btn" data-i18n="close"></button></form></span></div>
+  <p class="muted small" id="calendarDialogNote"></p>
+  <div class="table-scroll"><table class="full-cal" id="fullCalendar"></table></div>
+</dialog>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
