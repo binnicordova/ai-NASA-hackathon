@@ -319,8 +319,10 @@ export class MapView {
   }
 
   /** El contenedor cambió de tamaño (por ejemplo al girar el teléfono). */
+  /** El contenedor cambió de tamaño (un panel se ocultó o apareció): Leaflet y el lienzo de los focos se recalculan. */
   resize(): void {
-    this.map.invalidateSize();
+    this.map.invalidateSize({ pan: false });
+    if (this.map.hasLayer(this.squares)) this.squares.redraw();
   }
 
   /**

@@ -19,6 +19,12 @@ import { hexOpacity } from './area-of-interest/ui/mapView';
 import { readUrlState, writeUrlState } from './shared/urlState';
 
 const controller = new CalendarController();
+// La pestaña del enlace decide el ancho del mapa (Focos crudos no tiene panel): se aplica antes de crear el mapa,
+// para que Leaflet arranque con su tamaño real y no haya que corregirlo después.
+{
+  const linked = readUrlState();
+  document.querySelector('.app')!.classList.toggle('tab-raw', linked.metric === 'hotspots' && !linked.risk);
+}
 const svg = (id: string): SVGElement => document.getElementById(id) as unknown as SVGElement;
 
 const drawButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-draw]')];
@@ -452,7 +458,14 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
   renderMonthCard(calendar, data.anomaly);
   renderLevelLegend(calendar);
   const counted = measure();
-  document.querySelector('.app')!.classList.toggle('tab-raw', !risk && selection.metric === 'hotspots');
+  // Focos crudos no tiene panel de estadísticas: al entrar o salir, el mapa cambia de ancho y hay que avisarle.
+  const app = document.querySelector('.app')!;
+  const rawTab = !risk && selection.metric === 'hotspots';
+  if (app.classList.contains('tab-raw') !== rawTab) {
+    app.classList.toggle('tab-raw', rawTab);
+    // En el acto (no en el siguiente cuadro): así el encuadre del área, más abajo, ya usa el ancho nuevo.
+    map.resize();
+  }
   brush.render(daily, range, counted);
   renderHeatmap(byId('heatmap'), calendar, counted, range, {
     onSelect: (year, month) => {

@@ -342,6 +342,9 @@ dialog::backdrop { background: rgba(7, 23, 63, .6); }
 
 /* Focos crudos: la cifra principal son los eventos (focos disueltos por día). */
 .app.tab-raw .not-raw { display: none; }
+/* Focos crudos es dato bruto: sin panel de estadísticas ni gráficos; el mapa ocupa ese hueco. */
+.app.tab-raw .stats { display: none; }
+@media (min-width: 1024px) { .app.tab-raw { --c-stats: 0px; } .app.tab-raw .map-wrap { margin-right: -8px; } }
 .kpi.hl { background: color-mix(in srgb, var(--map-point) 14%, var(--s1)); outline: 1px solid color-mix(in srgb, var(--map-point) 45%, transparent); }
 .kpi.hl b { color: var(--map-point); }
 .ranking .hl { font-weight: 700; color: var(--map-point); background: color-mix(in srgb, var(--map-point) 9%, transparent); }

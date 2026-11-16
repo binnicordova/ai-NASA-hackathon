@@ -19,7 +19,7 @@ Tomadas de la app desplegada (<https://fire-calendar-538134722054.us-east1.run.a
 
 ![Cusco, septiembre de 2024](docs/img/02-cusco.jpg)
 
-**Focos crudos.** Cada foco con su buffer (375 m VIIRS, 1 km MODIS), disueltos por día en eventos de fuego; estadísticas por sensor, satélite, día/noche y confianza.
+**Focos crudos.** El dato bruto, sin panel de estadísticas: cada foco con su buffer (375 m VIIRS, 1 km MODIS), disueltos por día en eventos de fuego, y la línea de tiempo por días. Clic en un foco muestra su ficha y su evento.
 
 ![Focos crudos y eventos](docs/img/08-focos-rango.jpg)
 
