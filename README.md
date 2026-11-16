@@ -77,12 +77,12 @@ Checked on November 15, 2026 at 11:10 p.m. (Peru time).
 | Public link to the project | ✅ Public repository: <https://github.com/binnicordova/ai-NASA-hackathon> |
 | Project page with its eight fields | ✅ Completed by the team (source texts in [docs/08-envio.md](docs/08-envio.md)) |
 | 7-slide demo or 30 s video | ✅ Public YouTube video, exactly 30 s: <https://youtu.be/a8X_l8E2iQA> |
-| Declare the use of AI | ⚠️ Declared below; still to add the AI image tool used for the NASAT logo and each member's own use |
+| Declare the use of AI | ✅ Declared on the project page, with the logo's AI image tool and each member's use; summary below |
 | References for everything external | ✅ Listed below (data, code, fonts, brand, color science) |
 | No copyrighted material | ✅ Official Space Apps logo unaltered per its brand guide, open-licensed fonts, screenshots and video of our own app |
 | No secrets in the repository | ✅ The FIRMS `MAP_KEY` is not in the code |
 | Team of six people at most | To be confirmed by the team |
-| Submit by Sunday, November 15, 11:59 p.m. local time | ⏳ Everything is ready; the team presses submit before the deadline |
+| Submit by Sunday, November 15, 11:59 p.m. local time | ✅ Submitted on time |
 
 ### Judging criteria (1 to 5 each)
 
@@ -241,4 +241,4 @@ gcloud iam service-accounts add-iam-policy-binding $SA --project $PROJECT --role
 - Machado, Oliveira & Fernandes (2009), "A Physiologically-based Model for Simulation of Color Vision Deficiency", IEEE TVCG 15(6) · color-blindness check of the ramp
 - OKLab color space (Ottosson, 2020) · perceptual distances between ramp steps
 
-**Use of AI:** Claude (Anthropic) was used, through Claude Code, to analyze the challenge statement and rules, review the harmonized series, write `src/etl/fire_events.py`, `src/etl/peru_limits.py`, `functions/` (including the Early warning forecast and its out-of-sample check) and `web/`, take the README screenshots, and draft documentation. The team downloaded the FIRMS data, built the harmonization (`src/etl/harmonize_firms.py`) and reviewed the results. The NASAT logo was generated with an AI image tool (specify which). Complete with each member's actual use before submitting.
+**Use of AI:** Claude (Anthropic) was used, through Claude Code, to analyze the challenge statement and rules, review the harmonized series, write `src/etl/fire_events.py`, `src/etl/peru_limits.py`, `functions/` (including the Early warning forecast and its out-of-sample check) and `web/`, take the README screenshots, and draft documentation. The team downloaded the FIRMS data, built the harmonization (`src/etl/harmonize_firms.py`) and reviewed the results. The NASAT logo was generated with an AI image tool. The project page details the tool and each member's use of AI.
