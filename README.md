@@ -9,25 +9,29 @@ web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  F
 
 ## Capturas
 
-La interfaz usa la paleta de NASA Space Apps y sigue el tema claro u oscuro del dispositivo. Las primeras cuatro capturas son del tema oscuro.
+Tomadas de la app desplegada (<https://fire-calendar-538134722054.us-east1.run.app>) el 15 de noviembre de 2026. La interfaz usa la paleta de NASA Space Apps, en tema oscuro y claro, y tiene tres pestañas: **Armonizado**, **Focos crudos** y **Alerta temprana**.
 
-**Todo el Perú, mes en curso.** Mapa de celdas armonizadas, lectura del mes frente a su mediana, totales del rango y línea de tiempo.
+**Armonizado · todo el Perú.** Hexágonos de ~36 km² con la actividad armonizada (MODIS y VIIRS en la misma escala), el mes en curso frente a su mediana, los totales del rango y la línea de tiempo de 2000 a hoy.
 
 ![Vista nacional](docs/img/01-peru.jpg)
 
-**Cusco, septiembre de 2024.** Área por departamento, rango de fechas y veredicto "por encima de lo habitual".
+**Cusco, septiembre de 2024.** Área por límite oficial del INEI y rango de fechas por días.
 
 ![Cusco, septiembre de 2024](docs/img/02-cusco.jpg)
 
-**Calendario de quema con el número en cada celda.** En cursiva, los años solo-MODIS (estimados).
+**Focos crudos.** Cada foco con su buffer (375 m VIIRS, 1 km MODIS), disueltos por día en eventos de fuego; estadísticas por sensor, satélite, día/noche y confianza.
 
-![Calendario año × mes](docs/img/03-calendario.jpg)
+![Focos crudos y eventos](docs/img/08-focos-rango.jpg)
 
-**Ranking de departamentos y límites declarados.**
+**Alerta temprana · predicción 2027.** Eventos esperados por mes (modelo de Poisson sobre eventos MODIS, verificado fuera de muestra), probabilidad e impacto; el mapa baja de departamento a provincia y distrito.
 
-![Ranking y límites](docs/img/04-ranking-limites.jpg)
+![Alerta temprana](docs/img/14-alerta-temprana.jpg)
 
-**Tema claro, para uso en campo.** La misma vista de Cusco: la rampa es la misma en los dos temas, de amarillo pálido (poca actividad) a rojo oscuro (mucha).
+**Ranking de departamentos en el rango.** Hexágonos, focos y eventos (destacados), con límites oficiales del INEI.
+
+<img src="docs/img/04-ranking-limites.jpg" alt="Ranking de departamentos" width="360">
+
+**Tema claro, para uso en campo.** La rampa de fuego es la misma en los dos temas.
 
 ![Cusco en tema claro](docs/img/05-tema-claro.jpg)
 
@@ -37,20 +41,21 @@ Estado al 15 de noviembre de 2026. El cierre del envío es el domingo 15 de novi
 
 ### Lo que pide el enunciado
 
-| Criterio | Estado | Dónde |
-|---|---|---|
-| Armonizar MODIS y VIIRS hasta que el sensor no importe | ✅ Cumplido | `src/etl/harmonize_firms.py`; error mensual entre sensores de 89.9 % a 15.1 % en años reservados |
-| Aplicación web sobre los datos armonizados | ✅ Cumplido | `web/` + `functions/`, desplegada en Cloud Run |
-| Elegir región en el mapa y por coordenadas | ✅ Cumplido | Dibujar una caja, coordenadas N/S/O/E o departamento |
-| Elegir rango de fechas | ✅ Cumplido | Mes inicial y final, atajos y línea de tiempo |
-| Calendario desde inicios de los 2000 hasta hoy | ✅ Cumplido | Noviembre de 2000 a noviembre de 2026 |
-| Qué periodos del año tienen más fuego | ✅ Cumplido | Temporada pico y frecuencia por mes |
-| Qué años tuvieron más quema | ✅ Cumplido | Gráfica "Por año" |
-| Mes actual frente a la mediana histórica | ✅ Cumplido | Lectura, razón y percentil, comparando los mismos días del mes |
-| Rampas de color accesibles | ✅ Cumplido | Rampa de calor secuencial amarillo → rojo (rojo = más, igual en los dos temas), de luminosidad siempre decreciente, y número en cada celda. Comprobada con simulación de daltonismo (`npm --prefix web run check:palette`), no con personas |
-| CSV de los focos detectados en la búsqueda | ✅ Cumplido | "Focos de calor (CSV)", un foco por fila |
-| Descargar análisis y visualizaciones | ✅ Cumplido | CSV del análisis mensual y PNG de cada gráfica y del calendario |
-| Anomalías frente a promedios multianuales | ✅ Cumplido | Año frente a un año normal, con mediana y rango habitual |
+| Criterio | Estado | Dónde | Captura |
+|---|---|---|---|
+| Armonizar MODIS y VIIRS hasta que el sensor no importe | ✅ Cumplido | `src/etl/harmonize_firms.py`; error mensual entre sensores de 89,9 % a 15,1 % en años reservados (2021–2024) | <a href="docs/img/06-armonizacion.jpg"><img src="docs/img/06-armonizacion.jpg" alt="Antes y después de armonizar" width="220"></a> |
+| Aplicación web sobre los datos armonizados | ✅ Cumplido | `web/` + `functions/`, desplegada en Cloud Run | <a href="docs/img/01-peru.jpg"><img src="docs/img/01-peru.jpg" alt="Vista nacional" width="220"></a> |
+| Elegir región en el mapa y por coordenadas | ✅ Cumplido | Departamento › provincia › distrito (INEI), dibujar caja, polígono o mano alzada, o coordenadas N/S/O/E | <a href="docs/img/07-area.jpg"><img src="docs/img/07-area.jpg" alt="Área oficial con su contorno" width="220"></a> |
+| Elegir rango de fechas | ✅ Cumplido | Inicio y fin por días, atajos y línea de tiempo con zoom de años a días | <a href="docs/img/08-focos-rango.jpg"><img src="docs/img/08-focos-rango.jpg" alt="Rango por días en la línea de tiempo" width="220"></a> |
+| Calendario desde inicios de los 2000 hasta hoy | ✅ Cumplido | Noviembre de 2000 a noviembre de 2026, con el número en cada celda | <a href="docs/img/03-calendario.jpg"><img src="docs/img/03-calendario.jpg" alt="Calendario año × mes" width="220"></a> |
+| Qué periodos del año tienen más fuego | ✅ Cumplido | Temporada pico y frecuencia de cada nivel por mes | <a href="docs/img/09-frecuencia.jpg"><img src="docs/img/09-frecuencia.jpg" alt="Frecuencia por mes" width="220"></a> |
+| Qué años tuvieron más quema | ✅ Cumplido | Gráfica "Por año" (armonizada: los años se comparan) | <a href="docs/img/10-anios.jpg"><img src="docs/img/10-anios.jpg" alt="Por año" width="220"></a> |
+| Mes actual frente a la mediana histórica | ✅ Cumplido | Lectura, razón y percentil, comparando los mismos días del mes | <a href="docs/img/11-mes-actual.jpg"><img src="docs/img/11-mes-actual.jpg" alt="Mes en curso frente a la mediana" width="220"></a> |
+| Rampas de color accesibles | ✅ Cumplido | Rampa secuencial amarillo → rojo (rojo = más), igual en los dos temas, de luminosidad siempre decreciente y con número en cada celda. Comprobada con simulación de daltonismo (`npm --prefix web run check:palette`), no con personas | <a href="docs/img/05-tema-claro.jpg"><img src="docs/img/05-tema-claro.jpg" alt="Tema claro" width="220"></a> |
+| CSV de los focos detectados en la búsqueda | ✅ Cumplido | "Focos de calor (CSV)", un foco por fila | <a href="docs/img/12-descargas.jpg"><img src="docs/img/12-descargas.jpg" alt="Descargas" width="220"></a> |
+| Descargar análisis y visualizaciones | ✅ Cumplido | CSV de la actividad armonizada y del análisis mensual; PNG de cada gráfica y del calendario (botón "PNG") | <a href="docs/img/10-anios.jpg"><img src="docs/img/10-anios.jpg" alt="Gráfica con su botón PNG" width="220"></a> |
+| Anomalías frente a promedios multianuales | ✅ Cumplido | Año frente a un año normal, con mediana y rango habitual | <a href="docs/img/13-anomalia.jpg"><img src="docs/img/13-anomalia.jpg" alt="Año frente a un año normal" width="220"></a> |
+| Extra: alerta temprana | ✅ Añadido | Predicción 2027 por mes (Poisson / Poisson-Gamma sobre eventos MODIS), verificada en 2021–2025: rango del 80 % cumplido en 83–96 % de los casos | <a href="docs/img/14-alerta-temprana.jpg"><img src="docs/img/14-alerta-temprana.jpg" alt="Alerta temprana" width="220"></a> |
 
 ### Reglas del envío
 
@@ -80,7 +85,7 @@ Estado al 15 de noviembre de 2026. El cierre del envío es el domingo 15 de novi
 | Carpeta | Qué es |
 |---|---|
 | `data/` | Archivos de FIRMS y `data/processed/harmonized_fires.parquet` (serie armonizada) |
-| `src/etl/` | `harmonize_firms.py` (armonización y validación) y `fire_events.py` (eventos de fuego por buffer y disolución diaria) |
+| `src/etl/` | `harmonize_firms.py` (armonización y validación), `fire_events.py` (eventos de fuego por buffer y disolución diaria) y `peru_limits.py` (límites oficiales del INEI) |
 | `functions/` | Servicios headless (Python, DuckDB, FastAPI): JSON y CSV para cualquier cliente |
 | `web/` | Aplicación (Vite, TypeScript, Leaflet). Solo habla con `functions/` |
 | `docs/` | Análisis del reto, método y arquitectura ([docs/06-arquitectura-ddd.md](docs/06-arquitectura-ddd.md)) |
@@ -197,8 +202,8 @@ gcloud iam service-accounts add-iam-policy-binding $SA --project $PROJECT --role
 - Un evento de fuego es un grupo de focos cuyos buffers se tocan el mismo día; un incendio de varios días cuenta una vez por día.
 - Los focos crudos y los eventos no son comparables entre años; la actividad armonizada sí.
 - Antes de mediados de 2002 solo volaba Terra: esos valores son de baja confianza.
-- Los departamentos se asignan con contornos aproximados.
-- La app describe; no predice incendios.
+- Departamentos, provincias y distritos siguen los límites oficiales del INEI, ajustados a celdas H3 de ~36 km².
+- La predicción de Alerta temprana es estacional (lo que suele pasar cada mes desde 2003), no un pronóstico del tiempo; cuenta solo eventos MODIS para que todos los años cuenten igual.
 
 ## Para la página del proyecto
 

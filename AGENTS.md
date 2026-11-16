@@ -152,7 +152,7 @@ Reglas que no se rompen:
 
 ## Pendiente para el envío (revisar al empezar cada sesión)
 
-- Confirmar en git y abrir PR del trabajo de la rama de mapa; desplegar.
+- Desplegado en Cloud Run el 15 nov 2026 (revisión `fire-calendar-00006-786`, rama `claude/sat-alerta-temprana`, PR #9 sin fusionar). Tras fusionar, volver a desplegar desde `main`. Capturas del README: `docs/img/`, tomadas de producción con un script de puppeteer (una por criterio).
 - Los ocho campos de la página del proyecto y la demo (`docs/08-envio.md`), con declaración de uso de IA.
 - Referencias: además de NASA FIRMS, INEI (Geoservidor WFS/WMS `ig_departamento`, `ig_provincia`, `ig_distrito`), NASA GIBS, OpenStreetMap, H3, DuckDB, FastAPI y Leaflet.
 - El documento técnico del equipo (Google Docs) tiene afirmaciones que no coinciden con el código: diccionario de datos con columnas inexistentes, §7 presentado como código real, "polígonos con `unary_union`" y cifras no medidas (< 300 ms, 60 fps). El INEI ya se usa para elegir el área, pero no en la columna `department` del ETL.
