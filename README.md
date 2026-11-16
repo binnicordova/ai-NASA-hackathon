@@ -1,5 +1,13 @@
 # Calendario de quema · Perú
 
+<p align="center">
+  <a href="https://youtu.be/a8X_l8E2iQA" title="Ver el demo de NASAT.space en YouTube">
+    <img src="docs/img/demo-youtube.jpg" alt="Demo de NASAT.space (30 s): SAT · alerta temprana y armonización de MODIS y VIIRS" width="860">
+  </a>
+  <br>
+  <a href="https://youtu.be/a8X_l8E2iQA"><b>▶ Ver el demo en YouTube (30 s)</b></a> · <a href="https://nasat.space">nasat.space</a>
+</p>
+
 Proyecto del reto **Harmonization of MODIS and VIIRS Hot Spots** (NASA Space Apps Challenge 2026).
 Aplicación web con un calendario de actividad de quema sobre focos de calor de MODIS y VIIRS armonizados (NASA FIRMS), para el área y el rango de fechas que elige el usuario.
 
@@ -60,7 +68,7 @@ Estado al 15 de noviembre de 2026. El cierre del envío es el domingo 15 de novi
 | Trabajo original hecho durante el hackathon | ✅ |
 | Enlace público a la app, sin registro | ✅ <https://fire-calendar-538134722054.us-east1.run.app> (Cloud Run) |
 | Página del proyecto con sus ocho campos | ❌ Pendiente: textos listos en [docs/08-envio.md](docs/08-envio.md) |
-| Demo de 7 diapositivas o video de 30 s | ❌ Pendiente: guion listo en [docs/08-envio.md](docs/08-envio.md) |
+| Demo de 7 diapositivas o video de 30 s | ✅ Video de 30 s en YouTube, público: <https://youtu.be/a8X_l8E2iQA> |
 | Declarar el uso de IA | ⚠️ Borrador listo; falta lo que hizo cada integrante |
 | Referencias de todo lo externo | ⚠️ Borrador listo, más abajo |
 | Equipo de seis personas como máximo | Por confirmar por el equipo |
