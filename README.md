@@ -67,16 +67,22 @@ Status as of November 15, 2026. The submission deadline is Sunday, November 15 a
 
 ### Submission rules
 
+Checked on November 15, 2026 at 11:10 p.m. (Peru time).
+
 | Rule | Status |
 |---|---|
-| Use at least one NASA dataset | ✅ Everything comes from NASA FIRMS |
+| Use at least one NASA dataset | ✅ Every number comes from NASA FIRMS (MODIS C6.1, VIIRS C2); base map from NASA GIBS |
 | Original work done during the hackathon | ✅ |
-| Public link to the app, no sign-up | ✅ <https://fire-calendar-538134722054.us-east1.run.app> (Cloud Run) |
-| Project page with its eight fields | ❌ Pending: texts ready in [docs/08-envio.md](docs/08-envio.md) |
-| 7-slide demo or 30 s video | ✅ Public 30 s video on YouTube: <https://youtu.be/a8X_l8E2iQA> |
-| Declare the use of AI | ⚠️ Draft ready; each member's contribution still missing |
-| References for everything external | ⚠️ Draft ready, below |
+| Public link to the app, no sign-up | ✅ <https://nasat.space> and <https://fire-calendar-538134722054.us-east1.run.app> open without login (HTTP 200) |
+| Public link to the project | ✅ Public repository: <https://github.com/binnicordova/ai-NASA-hackathon> |
+| Project page with its eight fields | ✅ Completed by the team (source texts in [docs/08-envio.md](docs/08-envio.md)) |
+| 7-slide demo or 30 s video | ✅ Public YouTube video, exactly 30 s: <https://youtu.be/a8X_l8E2iQA> |
+| Declare the use of AI | ⚠️ Declared below; still to add the AI image tool used for the NASAT logo and each member's own use |
+| References for everything external | ✅ Listed below (data, code, fonts, brand, color science) |
+| No copyrighted material | ✅ Official Space Apps logo unaltered per its brand guide, open-licensed fonts, screenshots and video of our own app |
+| No secrets in the repository | ✅ The FIRMS `MAP_KEY` is not in the code |
 | Team of six people at most | To be confirmed by the team |
+| Submit by Sunday, November 15, 11:59 p.m. local time | ⏳ Everything is ready; the team presses submit before the deadline |
 
 ### Judging criteria (1 to 5 each)
 
@@ -86,7 +92,7 @@ Status as of November 15, 2026. The submission deadline is Sunday, November 15 a
 | Creativity | Harmonization with visible uncertainty, fire events by buffer and dissolve, plain-language reading of the month | Covered in the app |
 | Validity | Validation on held-out years and limitations stated on screen | Covered in the app |
 | Relevance | Full challenge checklist; FIRMS is all the data | Covered in the app |
-| Presentation | Interface with the NASA Space Apps palette, in light and dark themes. The rest depends on the project page and the demo | ⚠️ Interface ready; project page and demo not started |
+| Presentation | Interface with the NASA Space Apps palette, in light and dark themes; 30 s video demo and project page | ✅ Interface, project page and demo ready |
 
 ## Structure
 
@@ -219,6 +225,8 @@ gcloud iam service-accounts add-iam-policy-binding $SA --project $PROJECT --role
 
 **External references (code and data):**
 
+- INEI, Geoservidor WFS/WMS (`ig_departamento`, `ig_provincia`, `ig_distrito`) · official boundaries of departments, provinces and districts
+- NASA GIBS (Blue Marble) · satellite base map and the intro's 3D globe
 - Leaflet (BSD-2-Clause) · map
 - Official NASA Space Apps logo, unaltered, and the palette, gradient and typefaces from its brand guide · Fira Sans and Overpass (SIL OFL, Google Fonts)
 - OpenStreetMap (ODbL) · base map tiles
@@ -227,5 +235,10 @@ gcloud iam service-accounts add-iam-policy-binding $SA --project $PROJECT --role
 - Uber's H3 (Apache-2.0) · hexagonal grid
 - pandas, NumPy, SciPy (BSD-3-Clause), PyArrow (Apache-2.0) · ETL
 - Vite (MIT), TypeScript (Apache-2.0) · web build
+- certifi (MPL-2.0) · certificates for downloading the INEI boundaries
+- puppeteer-core (Apache-2.0) · only to take the README screenshots
+- ColorBrewer YlOrRd (Brewer & Harrower) · sequential heat ramp convention
+- Machado, Oliveira & Fernandes (2009), "A Physiologically-based Model for Simulation of Color Vision Deficiency", IEEE TVCG 15(6) · color-blindness check of the ramp
+- OKLab color space (Ottosson, 2020) · perceptual distances between ramp steps
 
-**Use of AI:** Claude (Anthropic) was used, through Claude Code, to analyze the challenge statement and rules, review the harmonized series, write `src/etl/fire_events.py`, `functions/` and `web/`, and draft documentation. The team downloaded the FIRMS data, built the harmonization (`src/etl/harmonize_firms.py`) and reviewed the results. The NASAT logo was generated with an AI image tool (specify which). Complete with each member's actual use before submitting.
+**Use of AI:** Claude (Anthropic) was used, through Claude Code, to analyze the challenge statement and rules, review the harmonized series, write `src/etl/fire_events.py`, `src/etl/peru_limits.py`, `functions/` (including the Early warning forecast and its out-of-sample check) and `web/`, take the README screenshots, and draft documentation. The team downloaded the FIRMS data, built the harmonization (`src/etl/harmonize_firms.py`) and reviewed the results. The NASAT logo was generated with an AI image tool (specify which). Complete with each member's actual use before submitting.
