@@ -1,108 +1,108 @@
-# Calendario de quema · Perú
+# Burn Calendar · Peru
 
 <p align="center">
-  <a href="https://youtu.be/a8X_l8E2iQA" title="Ver el demo de NASAT.space en YouTube">
-    <img src="docs/img/demo-youtube.jpg" alt="Demo de NASAT.space (30 s): SAT · alerta temprana y armonización de MODIS y VIIRS" width="860">
+  <a href="https://youtu.be/a8X_l8E2iQA" title="Watch the NASAT.space demo on YouTube">
+    <img src="docs/img/demo-youtube.jpg" alt="NASAT.space demo (30 s): early warning and harmonization of MODIS and VIIRS" width="860">
   </a>
   <br>
-  <a href="https://youtu.be/a8X_l8E2iQA"><b>▶ Ver el demo en YouTube (30 s)</b></a> · <a href="https://nasat.space">nasat.space</a>
+  <a href="https://youtu.be/a8X_l8E2iQA"><b>▶ Watch the demo on YouTube (30 s)</b></a> · <a href="https://nasat.space">nasat.space</a>
 </p>
 
-Proyecto del reto **Harmonization of MODIS and VIIRS Hot Spots** (NASA Space Apps Challenge 2026).
-Aplicación web con un calendario de actividad de quema sobre focos de calor de MODIS y VIIRS armonizados (NASA FIRMS), para el área y el rango de fechas que elige el usuario.
+Project for the **Harmonization of MODIS and VIIRS Hot Spots** challenge (NASA Space Apps Challenge 2026).
+A web application with a burn-activity calendar built on harmonized MODIS and VIIRS hot spots (NASA FIRMS), for the area and date range the user chooses.
 
 ```
 web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  FIRMS
 ```
 
-## Capturas
+## Screenshots
 
-Tomadas de la app desplegada (<https://fire-calendar-538134722054.us-east1.run.app>) el 15 de noviembre de 2026. La interfaz usa la paleta de NASA Space Apps, en tema oscuro y claro, y tiene tres pestañas: **Armonizado**, **Focos crudos** y **Alerta temprana**.
+Taken from the deployed app (<https://fire-calendar-538134722054.us-east1.run.app>) on November 15, 2026. The interface uses the NASA Space Apps palette, in dark and light themes, and has three tabs: **Harmonized**, **Raw hot spots** and **Early warning**.
 
-**Armonizado · todo el Perú.** Hexágonos de ~36 km² con la actividad armonizada (MODIS y VIIRS en la misma escala), el mes en curso frente a su mediana, los totales del rango y la línea de tiempo de 2000 a hoy.
+**Harmonized · all of Peru.** ~36 km² hexagons with harmonized activity (MODIS and VIIRS on the same scale), the current month against its median, the totals for the range, and the timeline from 2000 to today.
 
-![Vista nacional](docs/img/01-peru.jpg)
+![National view](docs/img/01-peru.jpg)
 
-**Cusco, septiembre de 2024.** Área por límite oficial del INEI y rango de fechas por días.
+**Cusco, September 2024.** Area by official INEI boundary and date range by days.
 
-![Cusco, septiembre de 2024](docs/img/02-cusco.jpg)
+![Cusco, September 2024](docs/img/02-cusco.jpg)
 
-**Focos crudos.** El dato bruto, sin panel de estadísticas: cada foco con su buffer (375 m VIIRS, 1 km MODIS), disueltos por día en eventos de fuego, y la línea de tiempo por días. Clic en un foco muestra su ficha y su evento.
+**Raw hot spots.** The raw data, with no statistics panel: each hot spot with its buffer (375 m VIIRS, 1 km MODIS), dissolved per day into fire events, and the timeline by days. Clicking a hot spot shows its details and its event.
 
-![Focos crudos y eventos](docs/img/08-focos-rango.jpg)
+![Raw hot spots and events](docs/img/08-focos-rango.jpg)
 
-**Alerta temprana · predicción 2027.** Eventos esperados por mes (modelo de Poisson sobre eventos MODIS, verificado fuera de muestra), probabilidad e impacto; el mapa baja de departamento a provincia y distrito.
+**Early warning · 2027 forecast.** Expected events per month (Poisson model on MODIS events, verified out of sample), probability and impact; the map drills down from department to province and district.
 
-![Alerta temprana](docs/img/14-alerta-temprana.jpg)
+![Early warning](docs/img/14-alerta-temprana.jpg)
 
-**Ranking de departamentos en el rango.** Hexágonos, focos y eventos (destacados), con límites oficiales del INEI.
+**Department ranking within the range.** Hexagons, hot spots and events (highlighted), with official INEI boundaries.
 
-<img src="docs/img/04-ranking-limites.jpg" alt="Ranking de departamentos" width="360">
+<img src="docs/img/04-ranking-limites.jpg" alt="Department ranking" width="360">
 
-**Tema claro, para uso en campo.** La rampa de fuego es la misma en los dos temas.
+**Light theme, for field use.** The fire ramp is the same in both themes.
 
-![Cusco en tema claro](docs/img/05-tema-claro.jpg)
+![Cusco in light theme](docs/img/05-tema-claro.jpg)
 
-## Criterios del hackathon y estado
+## Hackathon criteria and status
 
-Estado al 15 de noviembre de 2026. El cierre del envío es el domingo 15 de noviembre a las 11:59 p. m.
+Status as of November 15, 2026. The submission deadline is Sunday, November 15 at 11:59 p.m.
 
-### Lo que pide el enunciado
+### What the challenge asks for
 
-| Criterio | Estado | Dónde | Captura |
+| Criterion | Status | Where | Screenshot |
 |---|---|---|---|
-| Armonizar MODIS y VIIRS hasta que el sensor no importe | ✅ Cumplido | `src/etl/harmonize_firms.py`; error mensual entre sensores de 89,9 % a 15,1 % en años reservados (2021–2024) | <a href="docs/img/06-armonizacion.jpg"><img src="docs/img/06-armonizacion.jpg" alt="Antes y después de armonizar" width="220"></a> |
-| Aplicación web sobre los datos armonizados | ✅ Cumplido | `web/` + `functions/`, desplegada en Cloud Run | <a href="docs/img/01-peru.jpg"><img src="docs/img/01-peru.jpg" alt="Vista nacional" width="220"></a> |
-| Elegir región en el mapa y por coordenadas | ✅ Cumplido | Departamento › provincia › distrito (INEI), dibujar caja, polígono o mano alzada, o coordenadas N/S/O/E | <a href="docs/img/07-area.jpg"><img src="docs/img/07-area.jpg" alt="Área oficial con su contorno" width="220"></a> |
-| Elegir rango de fechas | ✅ Cumplido | Inicio y fin por días, atajos y línea de tiempo con zoom de años a días | <a href="docs/img/08-focos-rango.jpg"><img src="docs/img/08-focos-rango.jpg" alt="Rango por días en la línea de tiempo" width="220"></a> |
-| Calendario desde inicios de los 2000 hasta hoy | ✅ Cumplido | Noviembre de 2000 a noviembre de 2026, con el número en cada celda | <a href="docs/img/03-calendario.jpg"><img src="docs/img/03-calendario.jpg" alt="Calendario año × mes" width="220"></a> |
-| Qué periodos del año tienen más fuego | ✅ Cumplido | Temporada pico y frecuencia de cada nivel por mes | <a href="docs/img/09-frecuencia.jpg"><img src="docs/img/09-frecuencia.jpg" alt="Frecuencia por mes" width="220"></a> |
-| Qué años tuvieron más quema | ✅ Cumplido | Gráfica "Por año" (armonizada: los años se comparan) | <a href="docs/img/10-anios.jpg"><img src="docs/img/10-anios.jpg" alt="Por año" width="220"></a> |
-| Mes actual frente a la mediana histórica | ✅ Cumplido | Lectura, razón y percentil, comparando los mismos días del mes | <a href="docs/img/11-mes-actual.jpg"><img src="docs/img/11-mes-actual.jpg" alt="Mes en curso frente a la mediana" width="220"></a> |
-| Rampas de color accesibles | ✅ Cumplido | Rampa secuencial amarillo → rojo (rojo = más), igual en los dos temas, de luminosidad siempre decreciente y con número en cada celda. Comprobada con simulación de daltonismo (`npm --prefix web run check:palette`), no con personas | <a href="docs/img/05-tema-claro.jpg"><img src="docs/img/05-tema-claro.jpg" alt="Tema claro" width="220"></a> |
-| CSV de los focos detectados en la búsqueda | ✅ Cumplido | "Focos de calor (CSV)", un foco por fila | <a href="docs/img/12-descargas.jpg"><img src="docs/img/12-descargas.jpg" alt="Descargas" width="220"></a> |
-| Descargar análisis y visualizaciones | ✅ Cumplido | CSV de la actividad armonizada y del análisis mensual; PNG de cada gráfica y del calendario (botón "PNG") | <a href="docs/img/10-anios.jpg"><img src="docs/img/10-anios.jpg" alt="Gráfica con su botón PNG" width="220"></a> |
-| Anomalías frente a promedios multianuales | ✅ Cumplido | Año frente a un año normal, con mediana y rango habitual | <a href="docs/img/13-anomalia.jpg"><img src="docs/img/13-anomalia.jpg" alt="Año frente a un año normal" width="220"></a> |
-| Extra: alerta temprana | ✅ Añadido | Predicción 2027 por mes (Poisson / Poisson-Gamma sobre eventos MODIS), verificada en 2021–2025: rango del 80 % cumplido en 83–96 % de los casos | <a href="docs/img/14-alerta-temprana.jpg"><img src="docs/img/14-alerta-temprana.jpg" alt="Alerta temprana" width="220"></a> |
+| Harmonize MODIS and VIIRS until the sensor no longer matters | ✅ Done | `src/etl/harmonize_firms.py`; monthly cross-sensor error from 89.9% down to 15.1% on held-out years (2021–2024) | <a href="docs/img/06-armonizacion.jpg"><img src="docs/img/06-armonizacion.jpg" alt="Before and after harmonization" width="220"></a> |
+| Web application on the harmonized data | ✅ Done | `web/` + `functions/`, deployed on Cloud Run | <a href="docs/img/01-peru.jpg"><img src="docs/img/01-peru.jpg" alt="National view" width="220"></a> |
+| Choose a region on the map and by coordinates | ✅ Done | Department › province › district (INEI), draw a box, polygon or freehand shape, or N/S/W/E coordinates | <a href="docs/img/07-area.jpg"><img src="docs/img/07-area.jpg" alt="Official area with its outline" width="220"></a> |
+| Choose a date range | ✅ Done | Start and end by days, shortcuts, and a timeline that zooms from years to days | <a href="docs/img/08-focos-rango.jpg"><img src="docs/img/08-focos-rango.jpg" alt="Range by days on the timeline" width="220"></a> |
+| Calendar from the early 2000s to today | ✅ Done | November 2000 to November 2026, with the number in each cell | <a href="docs/img/03-calendario.jpg"><img src="docs/img/03-calendario.jpg" alt="Year × month calendar" width="220"></a> |
+| Which periods of the year have the most fire | ✅ Done | Peak season and frequency of each level by month | <a href="docs/img/09-frecuencia.jpg"><img src="docs/img/09-frecuencia.jpg" alt="Frequency by month" width="220"></a> |
+| Which years had the most burning | ✅ Done | "By year" chart (harmonized: years can be compared) | <a href="docs/img/10-anios.jpg"><img src="docs/img/10-anios.jpg" alt="By year" width="220"></a> |
+| Current month against the historical median | ✅ Done | Reading, ratio and percentile, comparing the same days of the month | <a href="docs/img/11-mes-actual.jpg"><img src="docs/img/11-mes-actual.jpg" alt="Current month against the median" width="220"></a> |
+| Accessible color ramps | ✅ Done | Sequential yellow → red ramp (red = more), identical in both themes, with strictly decreasing lightness and a number in each cell. Checked with color-blindness simulation (`npm --prefix web run check:palette`), not with people | <a href="docs/img/05-tema-claro.jpg"><img src="docs/img/05-tema-claro.jpg" alt="Light theme" width="220"></a> |
+| CSV of the hot spots found by the search | ✅ Done | "Hot spots (CSV)", one hot spot per row | <a href="docs/img/12-descargas.jpg"><img src="docs/img/12-descargas.jpg" alt="Downloads" width="220"></a> |
+| Download analyses and visualizations | ✅ Done | CSV of the harmonized activity and of the monthly analysis; PNG of each chart and of the calendar ("PNG" button) | <a href="docs/img/10-anios.jpg"><img src="docs/img/10-anios.jpg" alt="Chart with its PNG button" width="220"></a> |
+| Anomalies against multi-year averages | ✅ Done | Year against a normal year, with median and usual range | <a href="docs/img/13-anomalia.jpg"><img src="docs/img/13-anomalia.jpg" alt="Year against a normal year" width="220"></a> |
+| Extra: early warning | ✅ Added | 2027 forecast by month (Poisson / Poisson-Gamma on MODIS events), verified on 2021–2025: the 80% range held in 83–96% of cases | <a href="docs/img/14-alerta-temprana.jpg"><img src="docs/img/14-alerta-temprana.jpg" alt="Early warning" width="220"></a> |
 
-### Reglas del envío
+### Submission rules
 
-| Regla | Estado |
+| Rule | Status |
 |---|---|
-| Usar al menos un dato de NASA | ✅ Todo sale de NASA FIRMS |
-| Trabajo original hecho durante el hackathon | ✅ |
-| Enlace público a la app, sin registro | ✅ <https://fire-calendar-538134722054.us-east1.run.app> (Cloud Run) |
-| Página del proyecto con sus ocho campos | ❌ Pendiente: textos listos en [docs/08-envio.md](docs/08-envio.md) |
-| Demo de 7 diapositivas o video de 30 s | ✅ Video de 30 s en YouTube, público: <https://youtu.be/a8X_l8E2iQA> |
-| Declarar el uso de IA | ⚠️ Borrador listo; falta lo que hizo cada integrante |
-| Referencias de todo lo externo | ⚠️ Borrador listo, más abajo |
-| Equipo de seis personas como máximo | Por confirmar por el equipo |
+| Use at least one NASA dataset | ✅ Everything comes from NASA FIRMS |
+| Original work done during the hackathon | ✅ |
+| Public link to the app, no sign-up | ✅ <https://fire-calendar-538134722054.us-east1.run.app> (Cloud Run) |
+| Project page with its eight fields | ❌ Pending: texts ready in [docs/08-envio.md](docs/08-envio.md) |
+| 7-slide demo or 30 s video | ✅ Public 30 s video on YouTube: <https://youtu.be/a8X_l8E2iQA> |
+| Declare the use of AI | ⚠️ Draft ready; each member's contribution still missing |
+| References for everything external | ⚠️ Draft ready, below |
+| Team of six people at most | To be confirmed by the team |
 
-### Criterios del jurado (1 a 5 cada uno)
+### Judging criteria (1 to 5 each)
 
-| Criterio | Cómo lo cubre el proyecto | Estado |
+| Criterion | How the project covers it | Status |
 |---|---|---|
-| Impacto | Gestores de emergencias en el Perú; caso Cusco; interfaz en español | Cubierto en la app |
-| Creatividad | Armonización con incertidumbre visible, eventos de fuego por buffer y disolución, lectura en palabras del mes | Cubierto en la app |
-| Validez | Validación en años reservados y límites declarados en pantalla | Cubierto en la app |
-| Relevancia | Checklist del enunciado completo; FIRMS es todo el dato | Cubierto en la app |
-| Presentación | Interfaz con la paleta de NASA Space Apps, en tema claro y oscuro. El resto depende de la página del proyecto y la demo | ⚠️ Interfaz lista; página y demo sin empezar |
+| Impact | Emergency managers in Peru; Cusco case; Spanish interface (English also available) | Covered in the app |
+| Creativity | Harmonization with visible uncertainty, fire events by buffer and dissolve, plain-language reading of the month | Covered in the app |
+| Validity | Validation on held-out years and limitations stated on screen | Covered in the app |
+| Relevance | Full challenge checklist; FIRMS is all the data | Covered in the app |
+| Presentation | Interface with the NASA Space Apps palette, in light and dark themes. The rest depends on the project page and the demo | ⚠️ Interface ready; project page and demo not started |
 
-## Estructura
+## Structure
 
-| Carpeta | Qué es |
+| Folder | What it is |
 |---|---|
-| `data/` | Archivos de FIRMS y `data/processed/harmonized_fires.parquet` (serie armonizada) |
-| `src/etl/` | `harmonize_firms.py` (armonización y validación), `fire_events.py` (eventos de fuego por buffer y disolución diaria) y `peru_limits.py` (límites oficiales del INEI) |
-| `functions/` | Servicios headless (Python, DuckDB, FastAPI): JSON y CSV para cualquier cliente |
-| `web/` | Aplicación (Vite, TypeScript, Leaflet). Solo habla con `functions/` |
-| `docs/` | Análisis del reto, método y arquitectura ([docs/06-arquitectura-ddd.md](docs/06-arquitectura-ddd.md)) |
+| `data/` | FIRMS files and `data/processed/harmonized_fires.parquet` (harmonized series) |
+| `src/etl/` | `harmonize_firms.py` (harmonization and validation), `fire_events.py` (fire events by buffer and daily dissolve) and `peru_limits.py` (official INEI boundaries) |
+| `functions/` | Headless services (Python, DuckDB, FastAPI): JSON and CSV for any client |
+| `web/` | Application (Vite, TypeScript, Leaflet). Talks only to `functions/` |
+| `docs/` | Challenge analysis, method and architecture ([docs/06-arquitectura-ddd.md](docs/06-arquitectura-ddd.md)) |
 
-## Ejecutar
+## Run
 
-Requisitos: [uv](https://docs.astral.sh/uv/) y Node 20 o superior.
+Requirements: [uv](https://docs.astral.sh/uv/) and Node 20 or later.
 
-Todo en un solo servidor (la API sirve también la web compilada):
+Everything on a single server (the API also serves the compiled web app):
 
 ```bash
 npm --prefix web install && npm --prefix web run build
@@ -112,15 +112,15 @@ npm --prefix web install && npm --prefix web run build
 cd functions && uv run uvicorn --factory fire_calendar.interfaces.http.app:create_app --port 8000
 ```
 
-Abrir <http://localhost:8000>. La API queda en `/api/v1` y su documentación en `/api/docs`.
+Open <http://localhost:8000>. The API lives at `/api/v1` and its documentation at `/api/docs`.
 
-Para desarrollar la web con recarga automática, dejar la API en el puerto 8000 y en otra terminal:
+To develop the web app with hot reload, keep the API on port 8000 and, in another terminal:
 
 ```bash
 npm --prefix web run dev
 ```
 
-## Pruebas
+## Tests
 
 ```bash
 cd functions && uv run pytest
@@ -130,9 +130,9 @@ cd functions && uv run pytest
 npm --prefix web run typecheck
 ```
 
-Las pruebas de `functions/` cubren las reglas del dominio y la API contra el parquet real.
+The `functions/` tests cover the domain rules and the API against the real parquet.
 
-## Regenerar los datos
+## Regenerate the data
 
 ```bash
 uv run --with pandas --with numpy --with h3 --with pyarrow python src/etl/harmonize_firms.py
@@ -142,48 +142,48 @@ uv run --with pandas --with numpy --with h3 --with pyarrow python src/etl/harmon
 uv run --with pandas --with numpy --with scipy --with h3 --with pyarrow python src/etl/fire_events.py
 ```
 
-`fire_events.py` escribe `fire_events.parquet` (eventos de fuego) y `hotspots_clean.parquet` (focos limpios, uno por fila, para la descarga CSV de focos). Ambos son opcionales: sin ellos la app funciona, muestra los eventos como no disponibles y oculta la descarga de focos.
+`fire_events.py` writes `fire_events.parquet` (fire events) and `hotspots_clean.parquet` (clean hot spots, one per row, for the hot spot CSV download). Both are optional: without them the app still works, shows events as unavailable and hides the hot spot download.
 
-`peru_limits.py` descarga los límites oficiales del INEI (Geoservidor WFS Interoperabilidad: departamentos, provincias y distritos) y escribe `peru_limits.json`: contornos simplificados y, para cada departamento y distrito, las celdas H3 res 6 cuyo centro cae dentro. Con este archivo la app elige el área por límites oficiales; sin él, usa el departamento aproximado de la serie.
+`peru_limits.py` downloads the official INEI boundaries (Geoservidor WFS Interoperabilidad: departments, provinces and districts) and writes `peru_limits.json`: simplified outlines and, for each department and district, the H3 res 6 cells whose center falls inside. With this file the app selects areas by official boundaries; without it, it uses the series' approximate department.
 
-## Desplegar
+## Deploy
 
-**App pública:** <https://fire-calendar-538134722054.us-east1.run.app> (sin registro; `?lang=en` la abre en inglés).
+**Public app:** <https://fire-calendar-538134722054.us-east1.run.app> (no sign-up; `?lang=en` opens it in English).
 
-Un solo contenedor en **Google Cloud Run** (proyecto `nasat-fire-calendar`, región `us-east1`). El `Dockerfile` construye la web y arranca `functions/`, que sirve la API y la web en el mismo puerto. Los datos de `data/processed/` van dentro de la imagen: cada revisión lleva el código y los datos que le corresponden, y volver atrás mueve ambos.
+A single container on **Google Cloud Run** (project `nasat-fire-calendar`, region `us-east1`). The `Dockerfile` builds the web app and starts `functions/`, which serves the API and the web app on the same port. The data in `data/processed/` ships inside the image: each revision carries its matching code and data, and rolling back moves both.
 
 ```
-Navegador ──HTTPS──► Cloud Run "fire-calendar" (1 vCPU, 2 GiB, 0–3 instancias)
-                      uvicorn + FastAPI: /api/v1 (JSON, CSV) y / (web compilada)
-                      DuckDB en memoria ◄── data/processed/ dentro de la imagen
-Teselas del mapa: el navegador las pide directo a NASA GIBS y OpenStreetMap.
+Browser ──HTTPS──► Cloud Run "fire-calendar" (1 vCPU, 2 GiB, 0–3 instances)
+                   uvicorn + FastAPI: /api/v1 (JSON, CSV) and / (compiled web app)
+                   In-memory DuckDB ◄── data/processed/ inside the image
+Map tiles: the browser requests them directly from NASA GIBS and OpenStreetMap.
 ```
 
-Probar la imagen en local:
+Test the image locally:
 
 ```bash
 docker build -t fire-calendar . && docker run --rm -p 8080:8080 fire-calendar
 ```
 
-Publicar una nueva versión (por ejemplo, tras regenerar los datos):
+Publish a new version (for example, after regenerating the data):
 
 ```bash
 gcloud run deploy fire-calendar --source . --project nasat-fire-calendar --region us-east1 --allow-unauthenticated --memory 2Gi --cpu 1 --concurrency 40 --min-instances 0 --max-instances 3 --timeout 900
 ```
 
-- Arranca en ~1 s y usa ~370 MB. Tres exportaciones completas a la vez llegaron a ~1 GB, así que DuckDB queda limitado a 1 GB (`DUCKDB_MEMORY_LIMIT`) y el servicio tiene 2 GiB. Lo que no cabe se escribe a `/tmp`.
-- La exportación CSV de todos los focos (2,2 millones de filas) tarda ~3 min; el tiempo máximo por petición es de 15 min.
-- Escala a cero: tras un rato sin visitas, la primera carga tarda unos segundos más. Para una demo en vivo, `--min-instances 1` y luego volver a 0.
-- Presupuesto con alertas al 50 % y 100 % de S/ 40 al mes en la cuenta de facturación del proyecto.
-- `.gcloudignore` evita subir a Cloud Build los CSV crudos de FIRMS.
+- Starts in ~1 s and uses ~370 MB. Three full exports at once reached ~1 GB, so DuckDB is capped at 1 GB (`DUCKDB_MEMORY_LIMIT`) and the service has 2 GiB. Whatever doesn't fit spills to `/tmp`.
+- The CSV export of all hot spots (2.2 million rows) takes ~3 min; the maximum request time is 15 min.
+- Scales to zero: after a while with no visits, the first load takes a few extra seconds. For a live demo, use `--min-instances 1` and then set it back to 0.
+- Budget with alerts at 50% and 100% of S/ 40 per month on the project's billing account.
+- `.gcloudignore` keeps the raw FIRMS CSVs from being uploaded to Cloud Build.
 
-### Despliegue continuo
+### Continuous deployment
 
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) publica una revisión nueva cada vez que llega a `main` un cambio en `Dockerfile`, `.gcloudignore`, `functions/`, `web/`, `data/processed/` o el propio workflow. Primero corre las pruebas de `functions/` y el chequeo de tipos de `web/`; si fallan, no despliega. Después del despliegue comprueba que `/` y `/api/v1/meta` respondan. También se puede lanzar a mano desde la pestaña Actions ("Run workflow").
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) publishes a new revision every time a change to `Dockerfile`, `.gcloudignore`, `functions/`, `web/`, `data/processed/` or the workflow itself reaches `main`. It first runs the `functions/` tests and the `web/` type check; if they fail, it does not deploy. After deploying it checks that `/` and `/api/v1/meta` respond. It can also be triggered manually from the Actions tab ("Run workflow").
 
-GitHub entra a Google Cloud sin claves guardadas: el token OIDC del workflow se cambia por credenciales cortas de la cuenta de servicio `github-deployer` (Workload Identity Federation). El proveedor solo acepta tokens de este repositorio y de la rama `main`. La cuenta tiene los permisos mínimos para desplegar desde código fuente: `roles/run.sourceDeveloper`, `roles/serviceusage.serviceUsageConsumer` y `roles/iam.serviceAccountUser` sobre la cuenta con la que corre el servicio.
+GitHub accesses Google Cloud without stored keys: the workflow's OIDC token is exchanged for short-lived credentials of the `github-deployer` service account (Workload Identity Federation). The provider only accepts tokens from this repository and the `main` branch. The account has the minimum permissions to deploy from source: `roles/run.sourceDeveloper`, `roles/serviceusage.serviceUsageConsumer` and `roles/iam.serviceAccountUser` on the account the service runs as.
 
-Configuración única (ya hecha; sirve para rehacerla en otro proyecto):
+One-time setup (already done; useful to redo it in another project):
 
 ```bash
 PROJECT=nasat-fire-calendar; NUM=538134722054; REPO=binnicordova/ai-NASA-hackathon
@@ -203,29 +203,29 @@ gcloud iam service-accounts add-iam-policy-binding $SA --project $PROJECT --role
   --member "principalSet://iam.googleapis.com/projects/$NUM/locations/global/workloadIdentityPools/github/attribute.repository/$REPO"
 ```
 
-## Límites que la app declara
+## Limitations the app states
 
-- Un foco de calor es una detección térmica, no un incendio confirmado.
-- Sin observación (nubes, humo) no significa cero fuego.
-- Un evento de fuego es un grupo de focos cuyos buffers se tocan el mismo día; un incendio de varios días cuenta una vez por día.
-- Los focos crudos y los eventos no son comparables entre años; la actividad armonizada sí.
-- Antes de mediados de 2002 solo volaba Terra: esos valores son de baja confianza.
-- Departamentos, provincias y distritos siguen los límites oficiales del INEI, ajustados a celdas H3 de ~36 km².
-- La predicción de Alerta temprana es estacional (lo que suele pasar cada mes desde 2003), no un pronóstico del tiempo; cuenta solo eventos MODIS para que todos los años cuenten igual.
+- A hot spot is a thermal detection, not a confirmed fire.
+- No observation (clouds, smoke) does not mean zero fire.
+- A fire event is a group of hot spots whose buffers touch on the same day; a multi-day fire counts once per day.
+- Raw hot spots and events are not comparable across years; harmonized activity is.
+- Before mid-2002 only Terra was flying: those values are low-confidence.
+- Departments, provinces and districts follow the official INEI boundaries, snapped to ~36 km² H3 cells.
+- The Early warning forecast is seasonal (what usually happens each month since 2003), not a weather forecast; it counts only MODIS events so that every year counts the same.
 
-## Para la página del proyecto
+## For the project page
 
-**Datos de NASA:** FIRMS (Fire Information for Resource Management System): MODIS Collection 6.1 (Terra, Aqua) y VIIRS Collection 2 (S-NPP, NOAA-20, NOAA-21), archivo y casi tiempo real, Perú, noviembre de 2000 a noviembre de 2026. Mapa base por defecto y globo 3D de la intro: NASA GIBS, Blue Marble.
+**NASA data:** FIRMS (Fire Information for Resource Management System): MODIS Collection 6.1 (Terra, Aqua) and VIIRS Collection 2 (S-NPP, NOAA-20, NOAA-21), archive and near real time, Peru, November 2000 to November 2026. Default base map and the intro's 3D globe: NASA GIBS, Blue Marble.
 
-**Referencias externas (código y datos):**
+**External references (code and data):**
 
-- Leaflet (BSD-2-Clause) · mapa
-- Logo oficial de NASA Space Apps, sin alterar, y paleta, degradado y tipografías de su guía de marca · Fira Sans y Overpass (SIL OFL, Google Fonts)
-- OpenStreetMap (ODbL) · teselas del mapa base
-- DuckDB (MIT) · consultas sobre el parquet
-- FastAPI (MIT), Uvicorn (BSD-3-Clause) · servicio HTTP
-- H3 de Uber (Apache-2.0) · grilla hexagonal
+- Leaflet (BSD-2-Clause) · map
+- Official NASA Space Apps logo, unaltered, and the palette, gradient and typefaces from its brand guide · Fira Sans and Overpass (SIL OFL, Google Fonts)
+- OpenStreetMap (ODbL) · base map tiles
+- DuckDB (MIT) · queries over the parquet
+- FastAPI (MIT), Uvicorn (BSD-3-Clause) · HTTP service
+- Uber's H3 (Apache-2.0) · hexagonal grid
 - pandas, NumPy, SciPy (BSD-3-Clause), PyArrow (Apache-2.0) · ETL
-- Vite (MIT), TypeScript (Apache-2.0) · compilación de la web
+- Vite (MIT), TypeScript (Apache-2.0) · web build
 
-**Uso de IA:** se usó Claude (Anthropic), mediante Claude Code, para analizar el enunciado y las reglas, revisar la serie armonizada, escribir `src/etl/fire_events.py`, `functions/` y `web/`, y redactar documentación. El equipo descargó los datos de FIRMS, construyó la armonización (`src/etl/harmonize_firms.py`) y revisó los resultados. El logo de NASAT se generó con una herramienta de IA de imágenes (indicar cuál). Completar con el uso real de cada integrante antes de enviar.
+**Use of AI:** Claude (Anthropic) was used, through Claude Code, to analyze the challenge statement and rules, review the harmonized series, write `src/etl/fire_events.py`, `functions/` and `web/`, and draft documentation. The team downloaded the FIRMS data, built the harmonization (`src/etl/harmonize_firms.py`) and reviewed the results. The NASAT logo was generated with an AI image tool (specify which). Complete with each member's actual use before submitting.
