@@ -40,7 +40,7 @@ Si las tres respuestas son no, dilo y propón algo que sí aporte.
 
 - Conteos de MODIS y VIIRS sumados sin armonizar.
 - Afirmaciones científicas sin respaldo, o cifras inventadas en la app, la demo o el envío.
-- Promesas de predicción de incendios: la app describe, no predice.
+- Predicciones sin verificar: la única predicción de la app es la de "Alerta temprana" (Poisson estacional) y siempre va con su prueba fuera de muestra. Nada de pronósticos meteorológicos, ML ni puntajes de riesgo inventados.
 - Trabajo en funciones vistosas mientras falta algo de la lista anterior.
 - La página del proyecto o la demo sin empezar.
 - Riesgo de descalificación: sin dato de NASA como núcleo, sin declaración de uso de IA, referencias incompletas, material con derechos, enlaces que piden inicio de sesión.
@@ -78,7 +78,7 @@ Todo en `data/processed/` (consulta esquemas o metadatos, no el contenido comple
 | `hotspots_clean.parquet` | 1 fila por foco (2 168 246) | Focos **limpios, no crudos**: sin confianza baja, sin duplicados Archive/NRT y sin fuentes estáticas (2 439 271 en los CSV → 2 168 246). Coordenadas redondeadas a 5 decimales, pero la precisión real es el píxel: 375 m VIIRS, 1 km MODIS. |
 | `harmonized_fires.parquet` | celda H3 res 6 × día × sensor (1 090 622) | La serie armonizada. Celda ≈ 36 km². `harmonized_fire_activity` es una **celda-día equivalente a 1 satélite VIIRS** (β o α·γ), no depende de cuántos focos hubo en la celda. Las filas con `is_primary_series = False` (MODIS en la era VIIRS) tienen actividad armonizada **0**: así MODIS y VIIRS nunca se suman. |
 | `fire_events.parquet` | evento por día | Buffer de 375 m (VIIRS) o 1 km (MODIS) por foco; los que se tocan el mismo día son un evento (componentes conexas, sin polígonos). Guarda centroide, número de focos y FRP. **No está armonizado.** |
-| `peru_limits.json` | departamento / distrito | Límites oficiales del INEI (25 departamentos con Callao, 1 890 distritos), contornos simplificados y las celdas H3 res 6 cuyo centro cae dentro de cada uno. |
+| `peru_limits.json` | departamento / provincia / distrito | Límites oficiales del INEI (25 departamentos con Callao, 196 provincias, 1 890 distritos), contornos simplificados y las celdas H3 res 6 cuyo centro cae dentro de cada uno. Código de provincia = 4 primeros dígitos del ubigeo. |
 
 Reglas que no se rompen:
 
@@ -88,26 +88,30 @@ Reglas que no se rompen:
 
 ## API de `functions/` (prefijo `/api/v1`)
 
-- Área (una sola por petición): `department`, `district` (ubigeo), `bbox=oeste,sur,este,norte` o `polygon=lon,lat;...` (≤ 500 vértices). Sin área = todo el Perú.
+- Área (una sola por petición): `department`, `province` (4 dígitos), `district` (ubigeo), `bbox=oeste,sur,este,norte` o `polygon=lon,lat;...` (≤ 500 vértices). Sin área = todo el Perú.
 - Fechas: `from`/`to` aceptan días `AAAA-MM-DD` o meses `AAAA-MM`. El mapa, el ranking, los focos y los CSV trabajan por **días**; `/calendar`, `/anomaly` y `/calendar.csv` son mensuales.
-- Rutas: `meta`, `calendar`, `anomaly` (sin `month` = mes en curso), `daily` (serie diaria densa por área), `cells` (hexágonos del rango), `points` (focos crudos, los más recientes primero, tope 30 000 en la web y 50 000 en la API, con `summary` de todos los focos y `events` del recuento diario), `ranking` (hexágonos, focos, eventos por departamento), `limits`, `boundary`, `hotspots.csv`, `export.csv`, `calendar.csv`.
+- Rutas: `meta`, `calendar`, `anomaly` (sin `month` = mes en curso), `daily` (serie diaria densa por área), `cells` (hexágonos del rango), `points` (focos crudos, los más recientes primero, tope 30 000 en la web y 50 000 en la API, con `summary` de todos los focos y `events` del recuento diario), `ranking` (hexágonos, focos, eventos por departamento), `forecast?level=department|province|district` (predicción por mes de cada límite, con `check` fuera de muestra), `forecast/area` (la del área elegida), `shapes?level=` (contornos INEI de un nivel), `limits`, `boundary`, `hotspots.csv`, `export.csv`, `calendar.csv`.
 - El contrato está en `docs/06-arquitectura-ddd.md` y en `/api/docs`. Las cifras de las pruebas (`functions/tests/test_api.py`) salen de los datos reales: si cambias el ETL, revisa esas cifras.
 
 ## Estado de la web (`web/`)
 
-- Encabezado fijo (nunca se oculta) con el subtítulo "Harmonization of MODIS and VIIRS Hot Spots", pestañas **Armonizado** / **Focos crudos**, interruptor de tema claro/oscuro e idioma ES/EN.
+- Encabezado fijo (nunca se oculta) con el subtítulo "Harmonization of MODIS and VIIRS Hot Spots", pestañas **Armonizado** / **Focos crudos** / **Alerta temprana**, interruptor de tema claro/oscuro e idioma ES/EN.
+- **Alerta temprana** (SAT): "Predicción de fuego" por mes. Eventos esperados λ = media de eventos **MODIS** (Terra + Aqua, misma constelación desde 2003) de ese mes en 2003–año pasado; probabilidad de al menos uno y rango del 80 % con Poisson, o Poisson-Gamma (binomial negativa) cuando varianza > media. El mapa baja un nivel desde el área del filtro global (Perú → departamentos → provincias → distritos; un distrito se ve entre los de su provincia), color por **impacto** = eventos esperados redondeados (bajo 0–20, medio 21–50, alto 51–100, crítico > 100; sin color si la probabilidad es casi nula). La tarjeta muestra probabilidad e impacto juntos (matriz de riesgo); la lista se ordena por impacto. Se presenta como **predicción del año siguiente al último dato (2027)**: título, mes ("Diciembre 2027"), mapa, lista y resumen anual (total, mes más activo y más tranquilo) llevan el año; si el mes aún no llegó este año, se avisa que la misma predicción vale para él (el modelo es estacional, sin tendencia). Mes por defecto: el siguiente al último dato. Oculta línea de tiempo, fechas y descargas. Tarjeta: nivel de probabilidad de al menos un evento (alta ≥ 67 %, media ≥ 33 %, baja ≥ 5 %, casi nula; franjas fijas, en la etiqueta y las barras), eventos esperados en enteros (si redondean a 0, la cifra grande pasa a ser la probabilidad de al menos uno), una frase en lenguaje llano y el mismo mes del último año completo frente al rango.
+- Prueba fuera de muestra (ajuste 2003–2020, prueba 2021–2025): Brier 48 / 43 / 33 % mejor que una sola tasa (departamento / provincia / distrito); el rango del 80 % acierta 83 / 90 / 96 %. Poisson puro cubriría solo 58 % en departamentos (dispersión 4,5): por eso Poisson-Gamma.
+- "Limpiar filtros" (arriba del panel izquierdo) vuelve a todo el Perú y todo el rango sin cambiar de pestaña. Las áreas se nombran de arriba abajo: departamento › provincia › distrito.
 - **Armonizado**: hexágonos con la rampa de fuego del calendario, translúcidos; se pueden superponer los focos crudos.
 - **Focos crudos**: punto + buffer (1 km MODIS, 375 m VIIRS), **disueltos por día** (por defecto) o superpuestos; clic en un punto muestra el foco y su evento del día. Tarjeta de panel con hexágonos, focos, eventos, repartos por sensor/satélite/día-noche/confianza y el recuento diario de eventos.
 - Área: departamento → distrito (INEI), o dibujar caja, polígono o mano alzada. Contorno oficial en el mapa y capas WMS del INEI opcionales.
 - Línea de tiempo con inicio y fin, zoom de años a días (rueda, +/−, ajustar). Clic en un mes del calendario = ese mes como rango.
 - Vista: se pueden ocultar Área y fechas, Estadísticas y Línea de tiempo, o pasar a "solo mapa" (Esc sale).
 - Panel: área y rango se muestran una sola vez arriba; cada cifra vive en una sola tarjeta (no repetir textos ni números). El mes en curso frente a la mediana se mantiene en las dos pestañas.
-- El ranking de departamentos muestra hexágonos, focos y eventos, sin actividad armonizada (decisión del equipo): compara departamentos dentro de un rango, no años.
+- El ranking de departamentos muestra hexágonos, focos y eventos (ordenado y destacado por eventos), sin actividad armonizada (decisión del equipo): compara departamentos dentro de un rango, no años.
+- En **Focos crudos** todos los gráficos (por año, año frente a uno normal, calendario, línea de tiempo) cuentan **eventos** (focos disueltos por día), no focos sueltos (`Measure = 'events'` en `types.ts`). El "año normal" de eventos se calcula solo con los años de la misma constelación que el año elegido (2003–2011, 2012–2017, 2018–2022, 2023+). El gráfico de frecuencia mensual (armonizado) se oculta en esa pestaña.
 - Detalles de implementación que conviene saber:
   - `shared/palette.ts` lee los colores de `styles.css` **una vez al cargar**: cambiar de tema recarga la página (el estado vive en la URL). Ningún otro archivo declara colores; `npm run check:palette` valida la rampa.
   - Todo texto visible va en `shared/i18n.ts`, en español y en inglés (el tipo `Key` obliga a tener las dos).
   - `calendar/domain/fireEvents.ts` agrupa eventos en el navegador con la **misma regla** que `fire_events.py`; si cambias una, cambia la otra.
-  - URL: `department|district|bbox|polygon`, `from`, `to`, `metric=hotspots`, `points=1`, `buffers=overlap`. En el navegador (no en el enlace): `nasat-theme`, `nasat-hidden-sections`.
+  - URL: `department|province|district|bbox|polygon`, `from`, `to`, `metric=hotspots`, `points=1`, `buffers=overlap`, `view=risk`, `month=1..12`. En el navegador (no en el enlace): `nasat-theme`, `nasat-hidden-sections`.
 
 ## Decisiones tomadas (no revertir sin preguntar)
 
@@ -116,7 +120,7 @@ Reglas que no se rompen:
 - Hexágonos armonizados: rampa de fuego del calendario con transparencia; las celdas con actividad armonizada 0 (solo sensor secundario) no se pintan.
 - Los departamentos y distritos se filtran por celdas H3 de los límites INEI, no por el ETL: así no se recalcula la armonización.
 - El encabezado y sus pestañas nunca se ocultan; "solo mapa" oculta el resto.
-- La web describe, no predice: nada de pronósticos, alertas de riesgo ni ML en la app, aunque los documentos del equipo lo propongan.
+- La predicción (decisión del equipo, 15 nov 2026) es estacional y verificada: Poisson sobre eventos MODIS. No usa eventos con VIIRS (crecen con cada satélite) ni la actividad armonizada con umbral. MODIS cuenta menos eventos que la pestaña de focos crudos y en 2025 bajó (deriva de órbita de Terra/Aqua y año de poco fuego): dilo si sale en la demo. Nada de puntajes de riesgo con pesos inventados ni proyecciones de tendencia sin prueba.
 
 ## Cómo pide trabajo el equipo
 

@@ -131,6 +131,7 @@ class DuckDbHarmonizedSeriesGateway:
         return {
             "source": limits["source"], "retrieved": limits["retrieved"], "rule": limits["rule"],
             "departments": limits["departments"], "districts": {d["ubigeo"]: d for d in limits["districts"]},
+            "provinces": {p["code"]: p for p in limits.get("provinces", [])},
             "codes": {d["name"]: d["code"] for d in limits["departments"]},
         }
 
@@ -160,6 +161,10 @@ class DuckDbHarmonizedSeriesGateway:
             if not self._limits or area.district not in self._limits["districts"]:
                 raise DomainError(f"Distrito desconocido: {area.district}")
             return f"{column} in (select h3_res6 from area_cells where kind = 'district' and key = ?)", [area.district]
+        if area.kind == "province":
+            if not self._limits or area.province not in self._limits["provinces"]:
+                raise DomainError(f"Provincia desconocida: {area.province}")
+            return f"{column} in (select h3_res6 from area_cells where kind = 'province' and key = ?)", [area.province]
         if area.kind == "polygon" and area.polygon:
             return f"{column} in (select unnest(?::varchar[]))", [list(self._polygon_cells(area.polygon))]
         if area.kind == "bbox" and area.bbox:
@@ -403,6 +408,10 @@ class DuckDbHarmonizedSeriesGateway:
         return {
             "source": self._limits["source"], "retrieved": self._limits["retrieved"], "rule": self._limits["rule"],
             "departments": [{"code": d["code"], "name": d["name"]} for d in self._limits["departments"]],
+            "provinces": [
+                {"code": p["code"], "name": p["name"], "department": names.get(p["department"], "")}
+                for p in self._limits["provinces"].values()
+            ],
             "districts": [
                 {"ubigeo": d["ubigeo"], "name": d["name"], "province": d["province"], "department": names.get(d["department"], "")}
                 for d in self._limits["districts"].values()
@@ -416,7 +425,55 @@ class DuckDbHarmonizedSeriesGateway:
         if area.kind == "department":
             code = self._limits["codes"].get(area.department or "")
             return next((d["geometry"] for d in self._limits["departments"] if d["code"] == code), None)
+        if area.kind == "province":
+            province = self._limits["provinces"].get(area.province or "")
+            return province["geometry"] if province else None
         if area.kind == "district":
             district = self._limits["districts"].get(area.district or "")
             return district["geometry"] if district else None
         return None
+
+    # --- recurrencia por límite oficial ------------------------------------------------
+
+    def units(self, level: str) -> list[tuple[str, str, str]]:
+        """(clave, nombre, contenedor) de cada límite oficial del nivel. La clave es la que usa el área."""
+        if not self._limits:
+            return []
+        names = {d["code"]: d["name"] for d in self._limits["departments"]}
+        if level == "department":
+            return [(d["name"], d["name"], "") for d in self._limits["departments"]]
+        if level == "province":
+            return [(p["code"], p["name"], names.get(p["department"], "")) for p in self._limits["provinces"].values()]
+        return [
+            (d["ubigeo"], d["name"], f'{names.get(d["department"], "")} › {d["province"]}')
+            for d in self._limits["districts"].values()
+        ]
+
+    @lru_cache(maxsize=3)  # noqa: B019 (el gateway vive lo que el proceso)
+    def unit_month_events(self, level: str) -> dict[str, dict[tuple[int, int], int]]:
+        """Eventos de fuego MODIS de cada límite oficial por año y mes (cada evento, por la celda de su centroide)."""
+        if not self._limits or not self._has_events:
+            return {}
+        rows = self._query(
+            """select c.key, e.year, e.month, count(*)
+               from events e join area_cells c on c.h3_res6 = e.h3_res6
+               where c.kind = ? and e.sensor_set = 'modis' group by 1, 2, 3""",
+            [level],
+        )
+        names = {d["code"]: d["name"] for d in self._limits["departments"]} if level == "department" else {}
+        out: dict[str, dict[tuple[int, int], int]] = {}
+        for key, year, month, value in rows:
+            out.setdefault(names.get(key, key), {})[(int(year), int(month))] = int(value)
+        return out
+
+    def shapes(self, level: str) -> dict | None:
+        """Contornos simplificados de todos los límites de un nivel, como FeatureCollection."""
+        if not self._limits:
+            return None
+        if level == "department":
+            items = [(d["name"], d["geometry"]) for d in self._limits["departments"]]
+        elif level == "province":
+            items = [(p["code"], p["geometry"]) for p in self._limits["provinces"].values()]
+        else:
+            items = [(d["ubigeo"], d["geometry"]) for d in self._limits["districts"].values()]
+        return {"type": "FeatureCollection", "features": [{"type": "Feature", "id": k, "properties": {"key": k}, "geometry": g} for k, g in items]}

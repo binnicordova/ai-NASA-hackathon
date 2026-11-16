@@ -1,6 +1,6 @@
 import { t } from '../../shared/i18n';
 
-/** Área de interés: el país, un departamento o distrito oficial (INEI), una caja o un polígono dibujado. */
+/** Área de interés: el país, un departamento, provincia o distrito oficial (INEI), una caja o un polígono dibujado. */
 export interface BoundingBox {
   west: number;
   south: number;
@@ -14,7 +14,8 @@ export type LonLat = [number, number];
 export type AreaOfInterest =
   | { kind: 'country' }
   | { kind: 'department'; department: string }
-  | { kind: 'district'; ubigeo: string; name: string; department: string }
+  | { kind: 'province'; code: string; name: string; department: string }
+  | { kind: 'district'; ubigeo: string; name: string; department: string; province?: string }
   | { kind: 'bbox'; bbox: BoundingBox }
   | { kind: 'polygon'; ring: LonLat[] };
 
@@ -71,7 +72,9 @@ export function makeBoundingBox(north: number, south: number, west: number, east
 
 export function areaLabel(area: AreaOfInterest): string {
   if (area.kind === 'department') return area.department;
-  if (area.kind === 'district') return t('area.districtLabel', { name: area.name, dept: area.department });
+  // De arriba abajo: departamento › provincia › distrito.
+  if (area.kind === 'district') return [area.department, area.province, area.name].filter(Boolean).join(' › ');
+  if (area.kind === 'province') return `${area.department} › ${area.name}`;
   if (area.kind === 'polygon') return t('area.polygonLabel', { n: area.ring.length });
   if (area.kind === 'bbox') {
     const b = area.bbox;
@@ -84,6 +87,7 @@ export function areaLabel(area: AreaOfInterest): string {
 export function areaQuery(area: AreaOfInterest): Record<string, string> {
   if (area.kind === 'department') return { department: area.department };
   if (area.kind === 'district') return { district: area.ubigeo };
+  if (area.kind === 'province') return { province: area.code };
   if (area.kind === 'polygon') return { polygon: area.ring.map(([lon, lat]) => `${lon},${lat}`).join(';') };
   if (area.kind === 'bbox') {
     const b = area.bbox;

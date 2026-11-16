@@ -225,6 +225,8 @@ const PREVIEW = (): L.PolylineOptions => ({ color: ACCENT, weight: 2, dashArray:
 export class MapView {
   private readonly map: L.Map;
   private cellsLayer: L.GeoJSON | null = null;
+  private riskLayer: L.GeoJSON | null = null;
+  private readonly riskRenderer: L.Canvas;
   private readonly squares = new BufferLayer();
   private areaLayer: L.Layer | null = null;
   private mode: DrawMode | null = null;
@@ -241,6 +243,9 @@ export class MapView {
     this.map = L.map(container, { preferCanvas: true, zoomControl: true, minZoom: 4, maxZoom: 14 });
     // Los focos van en su propio panel, por encima de los hexágonos y sin capturar el puntero.
     this.map.createPane('hotspots').style.zIndex = '450';
+    // Alerta temprana: límites oficiales coloreados, por debajo del contorno del área elegida.
+    this.map.createPane('risk').style.zIndex = '390';
+    this.riskRenderer = L.canvas({ pane: 'risk', padding: 0.2 });
     const blueMarble = L.tileLayer(
       'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg',
       { maxNativeZoom: 8, attribution: 'Imagery: NASA GIBS, Blue Marble', className: 'basemap-satellite' },
@@ -353,6 +358,39 @@ export class MapView {
   }
 
   /** Superponer los buffers o disolverlos por día. */
+  /**
+   * Límites oficiales coloreados por sus eventos esperados en el mes elegido. Solo se dibujan los que `include`
+   * acepta (los que caen dentro del área elegida); `color` devuelve el paso de la rampa o `null` si no se espera fuego.
+   */
+  showRisk(
+    shapes: GeoJSON.FeatureCollection | null,
+    include: (key: string) => boolean,
+    color: (key: string) => string | null,
+    tooltip: (key: string) => string,
+    onPick: (key: string) => void,
+  ): void {
+    this.riskLayer?.remove();
+    this.riskLayer = null;
+    if (!shapes) return;
+    this.riskLayer = L.geoJSON(shapes, {
+      pane: 'risk',
+      filter: (feature) => include(String(feature.id)),
+      style: (feature) => {
+        const fill = color(String(feature!.id));
+        // Sin fuego esperado: solo el contorno, para que se vea el límite sin sugerir riesgo.
+        if (!fill) return { renderer: this.riskRenderer, color: '#ffffff', opacity: 0.35, weight: 0.5, fill: true, fillOpacity: 0 };
+        return { renderer: this.riskRenderer, color: '#ffffff', opacity: 0.5, weight: 0.6, fillColor: fill, fillOpacity: 0.78 };
+      },
+      onEachFeature: (feature, layer) => {
+        const key = String(feature.id);
+        layer.bindTooltip(() => tooltip(key), { sticky: true, direction: 'top' });
+        layer.on('click', () => {
+          if (!this.mode) onPick(key);
+        });
+      },
+    }).addTo(this.map);
+  }
+
   setBufferMode(mode: BufferMode): void {
     this.squares.setMode(mode);
   }
@@ -403,6 +441,11 @@ export class MapView {
   // --- dibujo del área: caja, polígono o a mano alzada ------------------------------
 
   /** Activa un modo de dibujo; el mismo botón otra vez lo cancela. */
+  /** Sale del modo de dibujo si estaba activo (por ejemplo, al limpiar los filtros). */
+  cancelDrawing(): void {
+    if (this.mode) this.stopDrawing();
+  }
+
   toggleDrawing(mode: DrawMode): void {
     const same = this.mode === mode;
     if (this.mode) this.stopDrawing();

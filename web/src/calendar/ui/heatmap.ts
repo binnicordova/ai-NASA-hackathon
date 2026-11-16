@@ -2,7 +2,7 @@ import { el } from '../../shared/dom';
 import { compact, fmt, monthKey, monthLabel } from '../../shared/format';
 import { monthNames, t } from '../../shared/i18n';
 import { RAMP, RAMP_INK, quantileBreaks, rampIndex } from '../../shared/palette';
-import { metricNoun, metricValue, type BurnCalendar, type Metric, type MonthPoint } from '../domain/types';
+import { metricNoun, metricValue, type BurnCalendar, type Measure, type MonthPoint } from '../domain/types';
 
 interface Handlers {
   /** Clic en un mes: el rango pasa a ser ese mes completo. */
@@ -18,7 +18,7 @@ function indexByMonth(calendar: BurnCalendar): Map<string, MonthPoint> {
 export function renderHeatmap(
   container: HTMLElement,
   calendar: BurnCalendar,
-  metric: Metric,
+  metric: Measure,
   range: { from: string; to: string },
   handlers: Handlers,
 ): void {
@@ -62,7 +62,7 @@ export function renderHeatmap(
 }
 
 /** Vista ampliada: tabla con el número en cada celda, para no depender solo del color. */
-export function renderFullCalendar(table: HTMLTableElement, calendar: BurnCalendar, metric: Metric): void {
+export function renderFullCalendar(table: HTMLTableElement, calendar: BurnCalendar, metric: Measure): void {
   const breaks = quantileBreaks(calendar.series.map((p) => metricValue(p, metric)));
   const points = indexByMonth(calendar);
   const head = el('tr', {}, el('th', { textContent: t('cal.year'), scope: 'col' }), ...monthNames().map((m) => el('th', { textContent: m, scope: 'col' })), el('th', { textContent: t('cal.total'), scope: 'col' }));

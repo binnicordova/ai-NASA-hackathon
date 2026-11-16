@@ -80,8 +80,11 @@ web/src/
 | `/cells?…&from=&to=` | GeoJSON de las celdas (hexágonos H3 res 6) con actividad en el rango; `month=AAAA-MM` sigue valiendo como atajo |
 | `/points?…&from=&to=&limit=` | Focos crudos sin armonizar, uno por detección, los más recientes primero, con el total y si se recortaron (tope 50 000) |
 | `/points` (campo `summary`) | Resumen de todos los focos crudos del área y el rango: por sensor, satélite, día/noche y confianza, días con focos, día con más focos y FRP |
-| `/limits` | Departamentos y distritos oficiales del INEI (sin geometría), para elegir el área |
-| `/boundary?department=\|district=` | Contorno oficial simplificado del departamento o distrito (Feature GeoJSON) |
+| `/limits` | Departamentos, provincias y distritos oficiales del INEI (sin geometría), para elegir el área |
+| `/boundary?department=\|province=\|district=` | Contorno oficial simplificado del departamento, la provincia o el distrito (Feature GeoJSON) |
+| `/shapes?level=department\|province\|district` | Contornos oficiales simplificados de todos los límites de un nivel (FeatureCollection) |
+| `/forecast?level=department\|province\|district` | Predicción de fuego por mes de cada límite: eventos esperados (λ), probabilidad de al menos uno y rango del 80 % (Poisson sobre eventos MODIS; Poisson-Gamma si los años varían más), con `check` fuera de muestra 2021+ |
+| `/forecast/area` | La misma predicción para el área elegida (cualquier tipo de área) |
 | `/ranking?from=&to=` | Departamentos en el rango |
 | `/hotspots.csv?…&from=&to=` | CSV de focos de calor, un foco por fila (lo que pide el enunciado) |
 | `/export.csv?…&from=&to=` | CSV de celdas-día activas del área y el rango, con la actividad armonizada |

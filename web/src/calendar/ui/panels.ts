@@ -125,7 +125,7 @@ export function renderRanking(
         el('td', {}, pick),
         el('td', { textContent: fmt(row.hexagons) }),
         el('td', { textContent: fmt(row.hotspots) }),
-        el('td', { textContent: row.events === null ? t('na') : fmt(row.events) }),
+        el('td', { className: 'hl', textContent: row.events === null ? t('na') : fmt(row.events) }),
       );
     }),
   );

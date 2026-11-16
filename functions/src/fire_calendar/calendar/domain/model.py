@@ -167,3 +167,64 @@ class RangeSummary:
     events_modis: int | None
     harmonized: float
     mixes_sensor_eras: bool  # el rango cruza 2012: los conteos crudos no son comparables dentro de él
+
+
+# --- Predicción de fuego: eventos por mes con un modelo de Poisson ---------------------------------------------
+
+# Base de conteo: eventos de fuego de MODIS (Terra + Aqua). Es la única serie de eventos con la misma constelación
+# todos los años desde 2003: los eventos con VIIRS crecen con cada satélite nuevo (2012, 2018, 2023) y mezclarlos
+# inflaría la predicción.
+FORECAST_SENSOR = "MODIS"
+# Rango que se muestra: del percentil 10 al 90 de la distribución (80 % de los años deberían caer dentro).
+FORECAST_RANGE = (0.10, 0.90)
+
+
+@dataclass(frozen=True)
+class MonthForecast:
+    """Lo que cabe esperar en un mes del calendario, según los mismos meses de años anteriores."""
+
+    month: int
+    expected: float  # λ: media de eventos por año en ese mes
+    p_any: float  # probabilidad de al menos un evento
+    low: int  # percentil 10
+    high: int  # percentil 90
+    years: int
+    years_with_events: int
+    overdispersed: bool  # varianza > media: se usa Poisson-Gamma (binomial negativa) en vez de Poisson puro
+
+
+@dataclass(frozen=True)
+class UnitForecast:
+    """Predicción mensual de un límite oficial (departamento, provincia o distrito)."""
+
+    key: str  # nombre del departamento, código de provincia o ubigeo del distrito
+    name: str
+    parent: str  # jerarquía de arriba abajo: "Departamento" o "Departamento › Provincia"
+    months: tuple[MonthForecast, ...]  # enero a diciembre
+
+
+@dataclass(frozen=True)
+class ForecastCheck:
+    """Prueba fuera de muestra: el modelo ajustado con unos años contra lo que pasó en los siguientes."""
+
+    train: tuple[int, int]
+    test: tuple[int, int]
+    cases: int  # unidades × meses × años de prueba
+    brier: float  # error cuadrático de la probabilidad de al menos un evento (0 = perfecto)
+    brier_reference: float  # el mismo error con una sola probabilidad para todo el Perú
+    coverage: float  # fracción de casos que cayeron dentro del rango del 80 %
+    poisson_coverage: float  # la misma fracción si el rango fuera Poisson puro
+    dispersion: float  # mediana de varianza / media en los meses con fuego (1 = Poisson)
+
+    @property
+    def skill(self) -> float:
+        """Mejora frente a la referencia: 0 = igual, 1 = perfecto."""
+        return 1 - self.brier / self.brier_reference if self.brier_reference else 0.0
+
+
+@dataclass(frozen=True)
+class ForecastMap:
+    level: str  # department | province | district
+    years: tuple[int, int]
+    units: tuple[UnitForecast, ...]
+    check: ForecastCheck | None

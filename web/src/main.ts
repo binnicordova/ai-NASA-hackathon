@@ -3,7 +3,8 @@ import './styles.css';
 import { COUNTRY, makeBoundingBox, type AreaOfInterest } from './area-of-interest/domain/area';
 import { MapView, type DrawMode } from './area-of-interest/ui/mapView';
 import { CalendarController, type BufferMode, type Changes, type Selection, type ViewData } from './calendar/application/calendarController';
-import { metricLabel, metricValue, type BurnCalendar, type CellCollection, type Metric, type PointSample } from './calendar/domain/types';
+import { metricLabel, metricValue, type BurnCalendar, type CellCollection, type Measure, type Metric, type PointSample, type Forecast, type RiskLevel } from './calendar/domain/types';
+import { events, impactColor, impactLevel, monthOfYear, percent, probabilityLevel, renderRiskCard, renderRiskLegend, unitsWithin } from './calendar/ui/riskPanel';
 import { renderBeforeAfter, renderFrequencyChart, renderYearDetail, renderYearsChart } from './calendar/ui/charts';
 import { renderFullCalendar, renderHeatmap } from './calendar/ui/heatmap';
 import { renderAbout, renderLevelLegend, renderMonthCard, renderRangeCard, renderRanking, renderRawCard, renderScope, renderStatus, type RankingKey } from './calendar/ui/panels';
@@ -52,33 +53,42 @@ const monthRange = (year: number, month: number): [string, string] => [`${monthK
 // --- área ------------------------------------------------------------------
 
 const department = byId<HTMLSelectElement>('department');
+const province = byId<HTMLSelectElement>('province');
 const district = byId<HTMLSelectElement>('district');
 department.addEventListener('change', () => {
   void controller.setArea(department.value ? { kind: 'department', department: department.value } : COUNTRY);
 });
+/** El área de la provincia elegida o, sin provincia, la del departamento. */
+function provinceOrDepartment(): AreaOfInterest {
+  const found = controller.data.limits?.provinces.find((p) => p.code === province.value);
+  if (found) return { kind: 'province', code: found.code, name: found.name, department: found.department };
+  return department.value ? { kind: 'department', department: department.value } : COUNTRY;
+}
+province.addEventListener('change', () => void controller.setArea(provinceOrDepartment()));
 district.addEventListener('change', () => {
   const found = controller.data.limits?.districts.find((d) => d.ubigeo === district.value);
-  void controller.setArea(
-    found ? { kind: 'district', ubigeo: found.ubigeo, name: found.name, department: found.department }
-    : department.value ? { kind: 'department', department: department.value } : COUNTRY,
-  );
+  void controller.setArea(found ? { kind: 'district', ubigeo: found.ubigeo, name: found.name, department: found.department, province: found.province } : provinceOrDepartment());
 });
 drawButtons.forEach((button) => button.addEventListener('click', () => map.toggleDrawing(button.dataset.draw as DrawMode)));
 
-/** Distritos oficiales del departamento elegido, agrupados por provincia. */
-let districtsFor = '';
-function fillDistricts(dept: string): void {
-  if (dept === districtsFor) return;
-  districtsFor = dept;
-  const rows = (controller.data.limits?.districts ?? []).filter((d) => d.department === dept);
-  const provinces = [...new Set(rows.map((d) => d.province))].sort((a, b) => a.localeCompare(b, 'es'));
+/** Provincias oficiales del departamento elegido y distritos de la provincia elegida (o de todo el departamento, por provincia). */
+let selectsFor = '';
+function fillAreaSelects(dept: string, prov: string): void {
+  const key = `${dept}|${prov}|${lang()}`;
+  if (key === selectsFor) return;
+  selectsFor = key;
+  const byName = (a: { name: string }, b: { name: string }): number => a.name.localeCompare(b.name, 'es');
+  const provinces = (controller.data.limits?.provinces ?? []).filter((p) => p.department === dept).sort(byName);
+  province.replaceChildren(el('option', { value: '', textContent: t('area.wholeDept') }), ...provinces.map((p) => el('option', { value: p.code, textContent: p.name })));
+  province.disabled = !provinces.length;
+  const rows = (controller.data.limits?.districts ?? []).filter((d) => d.department === dept && (!prov || d.ubigeo.startsWith(prov)));
+  const groups = provinces.filter((p) => rows.some((d) => d.ubigeo.startsWith(p.code)));
   district.replaceChildren(
-    el('option', { value: '', textContent: t('area.wholeDept') }),
-    ...provinces.map((province) =>
-      el('optgroup', { label: province },
-        ...rows.filter((d) => d.province === province).sort((a, b) => a.name.localeCompare(b.name, 'es'))
-          .map((d) => el('option', { value: d.ubigeo, textContent: d.name }))),
-    ),
+    el('option', { value: '', textContent: t(prov ? 'area.wholeProv' : 'area.wholeDept') }),
+    ...(prov
+      ? rows.sort(byName).map((d) => el('option', { value: d.ubigeo, textContent: d.name }))
+      : groups.map((p) => el('optgroup', { label: p.name },
+        ...rows.filter((d) => d.ubigeo.startsWith(p.code)).sort(byName).map((d) => el('option', { value: d.ubigeo, textContent: d.name }))))),
   );
   district.disabled = !rows.length;
 }
@@ -99,9 +109,12 @@ byId<HTMLFormElement>('coords').addEventListener('submit', (event) => {
 
 function syncAreaInputs(area: AreaOfInterest): void {
   byId('coordsError').hidden = true; // un área válida deja sin efecto el último error de coordenadas
-  const dept = area.kind === 'department' ? area.department : area.kind === 'district' ? area.department : '';
+  const dept = area.kind === 'department' || area.kind === 'district' || area.kind === 'province' ? area.department : '';
+  // La provincia de un distrito son los 4 primeros dígitos de su ubigeo.
+  const prov = area.kind === 'province' ? area.code : area.kind === 'district' ? area.ubigeo.slice(0, 4) : '';
   department.value = dept;
-  fillDistricts(dept);
+  fillAreaSelects(dept, prov);
+  province.value = prov;
   district.value = area.kind === 'district' ? area.ubigeo : '';
   if (area.kind === 'bbox') {
     const { north, south, west, east } = area.bbox;
@@ -146,6 +159,30 @@ document.querySelectorAll<HTMLButtonElement>('[data-quick]').forEach((button) =>
 
 const metricButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-metric]')];
 metricButtons.forEach((button) => button.addEventListener('click', () => void controller.setMetric(button.dataset.metric as Metric)));
+const riskTab = document.querySelector<HTMLButtonElement>('[data-tab="risk"]')!;
+riskTab.addEventListener('click', () => void controller.setRisk());
+const shiftRiskMonth = (step: number): void => controller.setRiskMonth(((controller.riskMonth() - 1 + step + 12) % 12) + 1);
+// Limpiar filtros: todo el Perú, todo el rango, sin capas extra; la pestaña se mantiene.
+byId('resetFilters').addEventListener('click', () => {
+  map.cancelDrawing();
+  coordInputs.forEach((input) => (input.value = ''));
+  void controller.reset().then(() => brush.showAll());
+});
+byId('riskPrev').addEventListener('click', () => shiftRiskMonth(-1));
+byId('riskNext').addEventListener('click', () => shiftRiskMonth(1));
+
+/** Elegir una unidad del mapa o de la lista: pasa a ser el área (departamento, provincia o distrito oficial). */
+function pickUnit(level: RiskLevel, key: string): void {
+  const limits = controller.data.limits;
+  if (level === 'department') void controller.setArea({ kind: 'department', department: key });
+  else if (level === 'province') {
+    const p = limits?.provinces.find((x) => x.code === key);
+    if (p) void controller.setArea({ kind: 'province', code: p.code, name: p.name, department: p.department });
+  } else {
+    const d = limits?.districts.find((x) => x.ubigeo === key);
+    if (d) void controller.setArea({ kind: 'district', ubigeo: d.ubigeo, name: d.name, department: d.department, province: d.province });
+  }
+}
 const bufferButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-buffers]')];
 bufferButtons.forEach((button) => button.addEventListener('click', () => controller.setBuffers(button.dataset.buffers as BufferMode)));
 const overlay = byId<HTMLInputElement>('overlay');
@@ -153,12 +190,18 @@ overlay.addEventListener('change', () => void controller.setOverlay(overlay.chec
 byId('yearPrev').addEventListener('click', () => controller.inspectYear((controller.selection.inspectedYear ?? 0) - 1));
 byId('yearNext').addEventListener('click', () => controller.inspectYear((controller.selection.inspectedYear ?? 0) + 1));
 
+/** Lo que cuentan los gráficos: en la pestaña de focos crudos, los eventos (buffers disueltos por día). */
+function measure(): Measure {
+  const { metric } = controller.selection;
+  return metric === 'hotspots' && controller.data.calendar?.series.some((p) => p.events !== null) ? 'events' : metric;
+}
+
 const dialog = byId<HTMLDialogElement>('calendarDialog');
 function openCalendarDialog(): void {
   const { calendar } = controller.data;
   if (!calendar) return;
-  renderFullCalendar(byId<HTMLTableElement>('fullCalendar'), calendar, controller.selection.metric);
-  byId('calendarDialogTitle').textContent = t('cal.dialog.title', { metric: metricLabel(controller.selection.metric).toLowerCase() });
+  renderFullCalendar(byId<HTMLTableElement>('fullCalendar'), calendar, measure());
+  byId('calendarDialogTitle').textContent = t('cal.dialog.title', { metric: metricLabel(measure()).toLowerCase() });
   byId('calendarDialogNote').textContent = t('cal.dialog.note');
   if (!dialog.open) dialog.showModal();
 }
@@ -166,7 +209,7 @@ byId('expand').addEventListener('click', openCalendarDialog);
 
 // --- descargas en PNG ------------------------------------------------------------
 
-const scopeText = (): string => `${areaLabel(controller.selection.area)} · ${metricLabel(controller.selection.metric)}`;
+const scopeText = (): string => `${areaLabel(controller.selection.area)} · ${metricLabel(measure())}`;
 
 document.querySelectorAll<HTMLButtonElement>('[data-png]').forEach((button) =>
   button.addEventListener('click', () => {
@@ -177,7 +220,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-png]').forEach((button) =>
   }),
 );
 
-function calendarImage(calendar: BurnCalendar, metric: Metric): CalendarImage {
+function calendarImage(calendar: BurnCalendar, metric: Measure): CalendarImage {
   const breaks = quantileBreaks(calendar.series.map((p) => metricValue(p, metric)));
   return {
     title: `${t('cal.title')} · ${scopeText()}`,
@@ -199,13 +242,14 @@ function calendarImage(calendar: BurnCalendar, metric: Metric): CalendarImage {
 for (const id of ['calendarPng', 'calendarPngDialog']) {
   byId(id).addEventListener('click', () => {
     const { calendar } = controller.data;
-    if (calendar) downloadCalendarPng(calendarImage(calendar, controller.selection.metric), `${safeFilename(`${t('cal.title')}-${scopeText()}`)}.png`);
+    if (calendar) downloadCalendarPng(calendarImage(calendar, measure()), `${safeFilename(`${t('cal.title')}-${scopeText()}`)}.png`);
   });
 }
 
 // --- ranking de departamentos: columna de orden y "ver todos" ----------------------
 
-let rankingSort: RankingKey = 'hexagons';
+// Los eventos (focos disueltos por día) son la cifra que se destaca del ranking.
+let rankingSort: RankingKey = 'events';
 let rankingAll = false;
 document.querySelectorAll<HTMLButtonElement>('.ranking button.sort').forEach((button) =>
   button.addEventListener('click', () => {
@@ -289,6 +333,7 @@ byId('langSwitch').addEventListener('click', () => {
   translateDocument();
   paintedCells = null; // la leyenda y las ventanas del mapa llevan texto: se repintan
   paintedPoints = null;
+  paintedRisk = '';
   renderAbout(controller.data.meta);
   paintThemeButton();
   controller.refresh();
@@ -305,11 +350,47 @@ let paintedCells: CellCollection | null | undefined = null;
 let hexExtent: { count: number; low: number; high: number } | null = null;
 let paintedPoints: PointSample | null | undefined = null;
 let metaShown = false;
+/** Qué capa de alerta temprana está pintada (nivel, mes e idioma): solo se repinta si cambia. */
+let paintedRisk = '';
+
+/** Pinta los límites del nivel que toca dentro del área elegida, coloreados por su nivel de probabilidad. */
+function paintRisk(fc: Forecast | null, shapes: GeoJSON.FeatureCollection | null, area: AreaOfInterest, month: number, year: number): void {
+  const shown = fc ? unitsWithin(fc, area) : [];
+  const key = fc && shapes ? `${fc.level}|${JSON.stringify(area)}|${month}|${year}|${lang()}` : '';
+  if (key === paintedRisk) return;
+  paintedRisk = key;
+  if (!fc || !shapes) {
+    map.showRisk(null, () => false, () => null, () => '', () => undefined);
+    return;
+  }
+  // Los departamentos se identifican por nombre en la API y en los contornos: la misma clave.
+  const units = new Map(shown.map((u) => [u.key, u]));
+  map.showRisk(
+    shapes,
+    (k) => units.has(k),
+    (k) => {
+      const u = units.get(k);
+      return u ? impactColor(u.expected[month - 1]!, u.pAny[month - 1]!) : null;
+    },
+    (k) => {
+      const u = units.get(k);
+      if (!u) return k;
+      const p = u.pAny[month - 1]!;
+      const impact = impactLevel(u.expected[month - 1]!, p);
+      return t('risk.tooltip', {
+        when: monthOfYear(month, year), name: u.name, parent: u.parent ? `${u.parent} · ` : '', e: events(u.expected[month - 1]!),
+        impact: impact ? t(`risk.impact.${impact}` as Key) : t('risk.prob.none'), level: t(`risk.prob.${probabilityLevel(p)}` as Key).toLowerCase(), p: percent(p),
+      });
+    },
+    (k) => pickUnit(fc.level, k),
+  );
+}
 
 /** Leyenda del mapa: qué se ve, para qué rango y, en focos, si se muestran todos o solo los más recientes. */
 function mapLegend(selection: Selection, data: ViewData, text: string): string {
   // Los totales ya están en el panel: la leyenda solo avisa de lo que no se ve (vacío o recortado).
   const parts: string[] = [];
+  if (selection.risk) return '';
   if (selection.metric === 'harmonized' && !hexExtent?.count) parts.push(t('map.empty', { range: text }));
   const points = data.points;
   if ((selection.metric === 'hotspots' || selection.overlay) && points) {
@@ -335,9 +416,12 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
   if (!calendar || !daily) return;
   const range = controller.range();
 
-  metricButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.metric === selection.metric)));
+  const risk = selection.risk;
+  document.querySelector('.app')!.classList.toggle('tab-risk', risk);
+  metricButtons.forEach((button) => button.setAttribute('aria-pressed', String(!risk && button.dataset.metric === selection.metric)));
+  riskTab.setAttribute('aria-pressed', String(risk));
   overlay.checked = selection.overlay;
-  byId('overlayToggle').hidden = selection.metric !== 'harmonized';
+  byId('overlayToggle').hidden = risk || selection.metric !== 'harmonized';
   syncAreaInputs(selection.area);
   from.value = range.from;
   to.value = range.to;
@@ -345,8 +429,20 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
   byId<HTMLAnchorElement>('dlCells').href = controller.downloadUrl('export.csv');
   byId<HTMLAnchorElement>('dlSeries').href = controller.downloadUrl('calendar.csv');
 
-  const points = (selection.metric === 'hotspots' || selection.overlay) && controller.mapIsCurrent('points') ? data.points : undefined;
+  const points = !selection.risk && (selection.metric === 'hotspots' || selection.overlay) && controller.mapIsCurrent('points') ? data.points : undefined;
   renderScope(range, selection.area);
+  const riskMonth = controller.riskMonth();
+  // Se predice el año siguiente al último dato (hoy, 2027).
+  const lastDate = meta?.lastDate ?? range.to;
+  const when = { year: Number(lastDate.slice(0, 4)) + 1, lastYear: Number(lastDate.slice(0, 4)), lastMonth: Number(lastDate.slice(5, 7)) };
+  if (risk) {
+    const years = data.areaForecast?.years ?? data.forecast?.years;
+    if (years) byId('scopeRange').textContent = t('risk.scope', { y: when.year, a: years.from, b: years.to, n: years.count });
+    renderRiskCard(selection.area, data.areaForecast, data.forecast, calendar, riskMonth, when, {
+      onMonth: (m) => controller.setRiskMonth(m),
+      onPick: (u) => pickUnit(data.forecast!.level, u.key),
+    });
+  }
   // Hexágonos con actividad armonizada en el rango: los mismos que pinta el mapa.
   const shownCells = selection.metric === 'harmonized' && controller.mapIsCurrent('cells') ? data.cells : null;
   const hexagons = shownCells ? shownCells.features.filter((f) => f.properties.harmonized > 0).length : null;
@@ -355,8 +451,10 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
   renderRawCard(points?.summary ?? null, points?.events ?? null, daily, range);
   renderMonthCard(calendar, data.anomaly);
   renderLevelLegend(calendar);
-  brush.render(daily, range, selection.metric);
-  renderHeatmap(byId('heatmap'), calendar, selection.metric, range, {
+  const counted = measure();
+  document.querySelector('.app')!.classList.toggle('tab-raw', !risk && selection.metric === 'hotspots');
+  brush.render(daily, range, counted);
+  renderHeatmap(byId('heatmap'), calendar, counted, range, {
     onSelect: (year, month) => {
       void controller.setRange(...monthRange(year, month));
       setTimeout(() => brush.fitSelection());
@@ -367,16 +465,18 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
   const year = selection.inspectedYear ?? calendar.years.at(-1)!.year;
   const currentMonth = data.anomaly?.month ?? calendar.series.at(-1)!.month;
   byId('frequencyText').textContent = renderFrequencyChart(svg('frequencyChart'), calendar, currentMonth);
-  byId('yearsUnit').textContent = `· ${metricLabel(selection.metric).toLowerCase()}`;
-  byId('yearsText').textContent = `${renderYearsChart(svg('yearsChart'), calendar, selection.metric, year, (y) => controller.inspectYear(y))}${t('years.click')}`;
+  byId('yearsUnit').textContent = `· ${metricLabel(counted).toLowerCase()}`;
+  byId('yearsText').textContent = `${renderYearsChart(svg('yearsChart'), calendar, counted, year, (y) => controller.inspectYear(y))}${t('years.click')}`;
   byId('yearDetailTitle').textContent = t('detail.title', { year });
-  byId('yearDetailText').textContent = renderYearDetail(svg('yearDetailChart'), calendar, year);
+  byId('yearDetailText').textContent = renderYearDetail(svg('yearDetailChart'), calendar, year, counted);
   renderBeforeAfter(svg('beforeAfterChart'), calendar);
   renderRanking(data.ranking, rankingSort, rankingAll, selection.area, (name) => void controller.setArea({ kind: 'department', department: name }));
 
   // Capas del mapa: hexágonos en la pestaña armonizada; focos en la cruda o superpuestos. Solo se repinta lo que cambió.
   const text = rangeLabel(range.from, range.to);
-  const cells = selection.metric === 'harmonized' && controller.mapIsCurrent('cells') ? data.cells : undefined;
+  const cells = !risk && selection.metric === 'harmonized' && controller.mapIsCurrent('cells') ? data.cells : undefined;
+  paintRisk(risk ? data.forecast : null, risk ? data.shapes : null, selection.area, riskMonth, when.year);
+  if (risk) renderRiskLegend(riskMonth, when.year);
   if (cells !== paintedCells) {
     hexExtent = map.showCells(cells ?? null, text);
     paintedCells = cells;
@@ -391,11 +491,12 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
     paintedPoints = points;
   }
   const legend = byId('mapLegend');
-  legend.hidden = data.mapLoading || (!cells && !points);
+  legend.hidden = data.mapLoading || (!cells && !points && !(risk && data.forecast));
+  byId('legendRisk').hidden = !risk;
   const legendText = byId('mapLegendText');
   legendText.textContent = mapLegend(selection, data, text);
   legendText.hidden = !legendText.textContent;
-  byId('legendHex').hidden = !hexExtent;
+  byId('legendHex').hidden = risk || !hexExtent;
   if (hexExtent) {
     byId('hexLow').textContent = `${compact(hexExtent.low)} (${t(`tone.${LOW_TONE}`)})`;
     byId('hexHigh').textContent = `${compact(hexExtent.high)} (${t(`tone.${HIGH_TONE}`)})`;

@@ -1,7 +1,7 @@
 import { el } from '../../shared/dom';
 import { addDays, dayLabel, dayNumber, fmt, monthEnd, monthLabel } from '../../shared/format';
 import { monthNames, t } from '../../shared/i18n';
-import { metricNoun, type DailySeries, type DayRange, type Metric } from '../domain/types';
+import { metricNoun, type DailySeries, type DayRange, type Measure } from '../domain/types';
 
 interface Handlers {
   /** Rango nuevo, en días `AAAA-MM-DD`. Se llama al soltar, no en cada píxel. */
@@ -38,7 +38,7 @@ export class RangeBrush {
   private readonly axis = el('div', { className: 'brush-axis' });
 
   private daily: DailySeries | null = null;
-  private metric: Metric = 'harmonized';
+  private metric: Measure = 'harmonized';
   private origin = 0; // número de día del índice 0
   private n = 0;
   private from = 0;
@@ -83,7 +83,7 @@ export class RangeBrush {
     new ResizeObserver(() => this.paint()).observe(this.track);
   }
 
-  render(daily: DailySeries, range: DayRange, metric: Metric): void {
+  render(daily: DailySeries, range: DayRange, metric: Measure): void {
     const dataChanged = daily !== this.daily;
     this.daily = daily;
     this.metric = metric;
@@ -178,7 +178,7 @@ export class RangeBrush {
   }
 
   private values(): number[] {
-    return this.daily![this.metric];
+    return this.metric === 'events' ? this.daily!.events ?? this.daily!.hotspots : this.daily![this.metric];
   }
 
   // --- pintar ------------------------------------------------------------------

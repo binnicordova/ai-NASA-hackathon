@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fire_calendar.calendar.application.use_cases import BurnCalendar
-from fire_calendar.calendar.domain.model import Anomaly
+from fire_calendar.calendar.domain.model import FORECAST_RANGE, FORECAST_SENSOR, Anomaly, ForecastCheck, ForecastMap, MonthForecast
 from fire_calendar.calendar.domain.ports import ActiveCell, DailyActivity, DepartmentTotal, HotspotSample
 from fire_calendar.shared.kernel import AreaOfInterest
 
@@ -14,6 +14,10 @@ def area_json(area: AreaOfInterest) -> dict:
     out: dict = {"kind": area.kind, "label": area.label}
     if area.department:
         out["department"] = area.department
+    if area.province:
+        out["province"] = area.province
+    if area.district:
+        out["district"] = area.district
     if area.bbox:
         out["bbox"] = [area.bbox.west, area.bbox.south, area.bbox.east, area.bbox.north]
     return out
@@ -162,5 +166,49 @@ def points_json(sample: HotspotSample) -> dict:
             [p.longitude, p.latitude, p.instrument, p.satellite, p.acq_date, p.acq_time, p.confidence,
              None if p.frp is None else round(p.frp, 1), p.daynight]
             for p in sample.points
+        ],
+    }
+
+
+def _check_json(check: ForecastCheck | None) -> dict | None:
+    if check is None:
+        return None
+    return {
+        "train": list(check.train), "test": list(check.test), "cases": check.cases,
+        "brier": round(check.brier, 4), "brierReference": round(check.brier_reference, 4), "skill": round(check.skill, 3),
+        "coverage": round(check.coverage, 3), "poissonCoverage": round(check.poisson_coverage, 3),
+        "dispersion": round(check.dispersion, 2),
+    }
+
+
+def _years_json(years: tuple[int, int]) -> dict:
+    return {"from": years[0], "to": years[1], "count": years[1] - years[0] + 1}
+
+
+def forecast_map_json(fc: ForecastMap) -> dict:
+    """Compacto: por unidad, doce valores de cada medida (enero a diciembre)."""
+    return {
+        "level": fc.level, "sensor": FORECAST_SENSOR, "years": _years_json(fc.years), "range": list(FORECAST_RANGE),
+        "units": [
+            {
+                "key": u.key, "name": u.name, "parent": u.parent,
+                "expected": [round(m.expected, 2) for m in u.months],
+                "pAny": [round(m.p_any, 3) for m in u.months],
+                "low": [m.low for m in u.months],
+                "high": [m.high for m in u.months],
+            }
+            for u in fc.units
+        ],
+        "check": _check_json(fc.check),
+    }
+
+
+def area_forecast_json(area: AreaOfInterest, years: tuple[int, int], months: tuple[MonthForecast, ...]) -> dict:
+    return {
+        "area": area_json(area), "sensor": FORECAST_SENSOR, "years": _years_json(years), "range": list(FORECAST_RANGE),
+        "months": [
+            {"month": m.month, "expected": round(m.expected, 2), "pAny": round(m.p_any, 3), "low": m.low, "high": m.high,
+             "years": m.years, "yearsWithEvents": m.years_with_events, "overdispersed": m.overdispersed}
+            for m in months
         ],
     }
