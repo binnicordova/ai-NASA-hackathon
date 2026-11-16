@@ -20,6 +20,9 @@ export const NEUTRAL = cssToken('--c-neutral');
 export const NEUTRAL_LINE = cssToken('--c-neutral-line');
 export const MODIS_ERA = cssToken('--c-modis');
 export const VIIRS_ERA = cssToken('--c-viirs');
+/** Mapa: los hexágonos armonizados (un solo color translúcido) y los focos crudos (rojo, como FIRMS). */
+export const HEX_FILL = cssToken('--map-hex');
+export const POINT_FILL = cssToken('--map-point');
 
 /** Cortes por cuantiles para repartir los valores en la rampa. */
 export function quantileBreaks(values: number[], quantiles = [0.3, 0.5, 0.7, 0.85, 0.95]): number[] {

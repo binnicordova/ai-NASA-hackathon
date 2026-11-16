@@ -76,13 +76,18 @@ web/src/
 | `/meta` | Fechas disponibles, departamentos, validación antes/después, límites declarados |
 | `/calendar?department=\|bbox=&from=&to=` | Serie mensual, totales por año, medianas, niveles de frecuencia, temporada pico, resumen del rango |
 | `/anomaly?…&month=AAAA-MM` | Mes frente a su mediana histórica (de igual a igual si es el mes en curso), con su lectura: por debajo, dentro, por encima o muy por encima de lo habitual |
-| `/cells?…&month=AAAA-MM` | GeoJSON de las celdas activas del mes |
+| `/daily?department=\|bbox=` | Serie diaria densa (armonizada, focos y eventos por día): fondo de la línea de tiempo y totales del rango con precisión de días |
+| `/cells?…&from=&to=` | GeoJSON de las celdas (hexágonos H3 res 6) con actividad en el rango; `month=AAAA-MM` sigue valiendo como atajo |
+| `/points?…&from=&to=&limit=` | Focos crudos sin armonizar, uno por detección, los más recientes primero, con el total y si se recortaron (tope 50 000) |
+| `/points` (campo `summary`) | Resumen de todos los focos crudos del área y el rango: por sensor, satélite, día/noche y confianza, días con focos, día con más focos y FRP |
+| `/limits` | Departamentos y distritos oficiales del INEI (sin geometría), para elegir el área |
+| `/boundary?department=\|district=` | Contorno oficial simplificado del departamento o distrito (Feature GeoJSON) |
 | `/ranking?from=&to=` | Departamentos en el rango |
 | `/hotspots.csv?…&from=&to=` | CSV de focos de calor, un foco por fila (lo que pide el enunciado) |
 | `/export.csv?…&from=&to=` | CSV de celdas-día activas del área y el rango, con la actividad armonizada |
 | `/calendar.csv?…&from=&to=` | El análisis en tabla: serie mensual con mediana histórica, razón y rango habitual |
 
-El área es todo el Perú (sin parámetros), un `department` o una caja `bbox=oeste,sur,este,norte`. Documentación interactiva en `/api/docs`.
+El área es todo el Perú (sin parámetros), un `department`, un `district` (ubigeo de 6 dígitos), una caja `bbox=oeste,sur,este,norte` o un `polygon=lon,lat;lon,lat;...` dibujado (hasta 500 vértices). Departamentos y distritos usan los límites oficiales del INEI (`data/processed/peru_limits.json`, de `src/etl/peru_limits.py`); como los polígonos dibujados, se ajustan a la grilla H3 res 6: cuenta cada celda cuyo centro cae dentro. `from` y `to` aceptan días `AAAA-MM-DD` o meses `AAAA-MM` (primer y último día del mes); `/calendar` y `/calendar.csv` son mensuales y usan el mes de cada fecha. Documentación interactiva en `/api/docs`.
 
 ## Propuesta original
 

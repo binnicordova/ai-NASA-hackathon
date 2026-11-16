@@ -62,12 +62,97 @@ web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  F
 ```
 
 - `data/`: archivos de FIRMS y la serie armonizada (`data/processed/harmonized_fires.parquet`), que produce `src/etl/`. Sin HTTP ni interfaz.
-- `src/etl/`: ingesta, limpieza, armonización y validación. Es la ciencia del proyecto.
+- `src/etl/`: ingesta, limpieza, armonización y validación. Es la ciencia del proyecto. `harmonize_firms.py` (serie armonizada y validación), `fire_events.py` (focos limpios y eventos de fuego por día) y `peru_limits.py` (límites oficiales del INEI y sus celdas H3).
 - `functions/`: servicios headless que leen la serie armonizada y responden JSON/CSV a cualquier cliente (`web/`, y a futuro `expoapp/`, `wspagent/`, `ai/`). Sin ciencia de armonización y sin interfaz.
 - `web/`: aplicación. Solo habla con `functions/`.
 - `docs/`: análisis y decisiones.
 
 Se usa **DDD**: respeta el lenguaje ubicuo, los contextos delimitados y las capas de [`docs/06-arquitectura-ddd.md`](docs/06-arquitectura-ddd.md). La documentación se escribe en español.
+
+## Modelo de datos: tres niveles y una grilla
+
+Todo en `data/processed/` (consulta esquemas o metadatos, no el contenido completo):
+
+| Archivo | Unidad | Qué es |
+|---|---|---|
+| `hotspots_clean.parquet` | 1 fila por foco (2 168 246) | Focos **limpios, no crudos**: sin confianza baja, sin duplicados Archive/NRT y sin fuentes estáticas (2 439 271 en los CSV → 2 168 246). Coordenadas redondeadas a 5 decimales, pero la precisión real es el píxel: 375 m VIIRS, 1 km MODIS. |
+| `harmonized_fires.parquet` | celda H3 res 6 × día × sensor (1 090 622) | La serie armonizada. Celda ≈ 36 km². `harmonized_fire_activity` es una **celda-día equivalente a 1 satélite VIIRS** (β o α·γ), no depende de cuántos focos hubo en la celda. Las filas con `is_primary_series = False` (MODIS en la era VIIRS) tienen actividad armonizada **0**: así MODIS y VIIRS nunca se suman. |
+| `fire_events.parquet` | evento por día | Buffer de 375 m (VIIRS) o 1 km (MODIS) por foco; los que se tocan el mismo día son un evento (componentes conexas, sin polígonos). Guarda centroide, número de focos y FRP. **No está armonizado.** |
+| `peru_limits.json` | departamento / distrito | Límites oficiales del INEI (25 departamentos con Callao, 1 890 distritos), contornos simplificados y las celdas H3 res 6 cuyo centro cae dentro de cada uno. |
+
+Reglas que no se rompen:
+
+- La comparación entre años solo vale con la **actividad armonizada**. Focos, eventos y hexágonos crecen con cada satélite nuevo (2012, 2018, 2023); dilo siempre que se muestren.
+- Toda área (departamento, distrito, caja, polígono dibujado) se **ajusta a la grilla H3 res 6**: cuenta cada celda cuyo centro cae dentro. Al servir los datos, el departamento de cada celda sale de los límites oficiales del INEI; la columna `department` del parquet es aproximada y no se usa para filtrar.
+- Los eventos se asignan a un área por su centroide: en los bordes pueden sumar unos pocos focos de más o de menos que los puntos.
+
+## API de `functions/` (prefijo `/api/v1`)
+
+- Área (una sola por petición): `department`, `district` (ubigeo), `bbox=oeste,sur,este,norte` o `polygon=lon,lat;...` (≤ 500 vértices). Sin área = todo el Perú.
+- Fechas: `from`/`to` aceptan días `AAAA-MM-DD` o meses `AAAA-MM`. El mapa, el ranking, los focos y los CSV trabajan por **días**; `/calendar`, `/anomaly` y `/calendar.csv` son mensuales.
+- Rutas: `meta`, `calendar`, `anomaly` (sin `month` = mes en curso), `daily` (serie diaria densa por área), `cells` (hexágonos del rango), `points` (focos crudos, los más recientes primero, tope 30 000 en la web y 50 000 en la API, con `summary` de todos los focos y `events` del recuento diario), `ranking` (hexágonos, focos, eventos por departamento), `limits`, `boundary`, `hotspots.csv`, `export.csv`, `calendar.csv`.
+- El contrato está en `docs/06-arquitectura-ddd.md` y en `/api/docs`. Las cifras de las pruebas (`functions/tests/test_api.py`) salen de los datos reales: si cambias el ETL, revisa esas cifras.
+
+## Estado de la web (`web/`)
+
+- Encabezado fijo (nunca se oculta) con el subtítulo "Harmonization of MODIS and VIIRS Hot Spots", pestañas **Armonizado** / **Focos crudos**, interruptor de tema claro/oscuro e idioma ES/EN.
+- **Armonizado**: hexágonos con la rampa de fuego del calendario, translúcidos; se pueden superponer los focos crudos.
+- **Focos crudos**: punto + buffer (1 km MODIS, 375 m VIIRS), **disueltos por día** (por defecto) o superpuestos; clic en un punto muestra el foco y su evento del día. Tarjeta de panel con hexágonos, focos, eventos, repartos por sensor/satélite/día-noche/confianza y el recuento diario de eventos.
+- Área: departamento → distrito (INEI), o dibujar caja, polígono o mano alzada. Contorno oficial en el mapa y capas WMS del INEI opcionales.
+- Línea de tiempo con inicio y fin, zoom de años a días (rueda, +/−, ajustar). Clic en un mes del calendario = ese mes como rango.
+- Vista: se pueden ocultar Área y fechas, Estadísticas y Línea de tiempo, o pasar a "solo mapa" (Esc sale).
+- Panel: área y rango se muestran una sola vez arriba; cada cifra vive en una sola tarjeta (no repetir textos ni números). El mes en curso frente a la mediana se mantiene en las dos pestañas.
+- El ranking de departamentos muestra hexágonos, focos y eventos, sin actividad armonizada (decisión del equipo): compara departamentos dentro de un rango, no años.
+- Detalles de implementación que conviene saber:
+  - `shared/palette.ts` lee los colores de `styles.css` **una vez al cargar**: cambiar de tema recarga la página (el estado vive en la URL). Ningún otro archivo declara colores; `npm run check:palette` valida la rampa.
+  - Todo texto visible va en `shared/i18n.ts`, en español y en inglés (el tipo `Key` obliga a tener las dos).
+  - `calendar/domain/fireEvents.ts` agrupa eventos en el navegador con la **misma regla** que `fire_events.py`; si cambias una, cambia la otra.
+  - URL: `department|district|bbox|polygon`, `from`, `to`, `metric=hotspots`, `points=1`, `buffers=overlap`. En el navegador (no en el enlace): `nasat-theme`, `nasat-hidden-sections`.
+
+## Decisiones tomadas (no revertir sin preguntar)
+
+- Buffer de cada foco = tamaño nominal de su píxel (1 km MODIS, 375 m VIIRS), igual en el mapa, en `fireEvents.ts` y en `fire_events.py`. FIRMS describe el foco como el centro del píxel, así que el alcance real es la mitad; si se cambia, hay que regenerar `fire_events.parquet` para que mapa y estadísticas sigan coincidiendo.
+- Focos crudos: buffers **disueltos por día** por defecto (una figura por evento, los días se apilan con transparencia); "Superpuestos" como alternativa. La unión se compone en un lienzo auxiliar, no con una librería de geometría (miles de círculos serían lentos).
+- Hexágonos armonizados: rampa de fuego del calendario con transparencia; las celdas con actividad armonizada 0 (solo sensor secundario) no se pintan.
+- Los departamentos y distritos se filtran por celdas H3 de los límites INEI, no por el ETL: así no se recalcula la armonización.
+- El encabezado y sus pestañas nunca se ocultan; "solo mapa" oculta el resto.
+- La web describe, no predice: nada de pronósticos, alertas de riesgo ni ML en la app, aunque los documentos del equipo lo propongan.
+
+## Cómo pide trabajo el equipo
+
+- Escribe en inglés o español y suele pedir actuar como "senior designer / software engineer / experience". Responde en su idioma; los textos de la app van en español e inglés.
+- Espera cambios completos de extremo a extremo (ETL → API → web), verificados en el navegador, con pruebas al día. Señala con claridad cuando algo compite con lo que falta para el envío.
+- Pide quitar texto repetido: antes de añadir una etiqueta o una nota, comprueba que esa información no esté ya en otra parte de la pantalla.
+- La marca oficial de Space Apps manda sobre los documentos internos del equipo (logo NASAT, paleta y degradado oficiales).
+
+## Límites conocidos (decláralos si salen en la demo)
+
+- Más de 30 000 focos en el rango: el mapa dibuja los más recientes y lo avisa; las estadísticas cuentan todos.
+- Blue Marble (GIBS) no tiene detalle por encima del zoom 8; para ver focos de cerca, el mapa de calles.
+- El agrupado de eventos del navegador puede diferir en unos pocos eventos del servidor en los bordes del área (el servidor agrupa todo el Perú).
+- El mes en curso es parcial: se compara con los mismos días de años anteriores.
+
+## Cómo trabajar
+
+- Pruebas: `cd functions && uv run python -m pytest -q`. Web: `cd web && npx tsc --noEmit && npm run build && npm run check:palette`.
+- Servidores: `.claude/launch.json` (`fire-calendar` en :8000 y `web-dev` en :5173, que reenvía `/api` a :8000). Si :8000 está ocupado por otra copia del repositorio, la API arranca en otro puerto y Vite seguiría hablando con la copia vieja: arranca Vite con `FUNCTIONS_URL=http://127.0.0.1:<puerto>`.
+- La API no recarga sola: tras cambiar Python, reinicia el servidor.
+- Para regenerar los límites: `uv run --project functions python src/etl/peru_limits.py`. El WFS del INEI rechaza el agente por defecto de curl; el script se identifica como `NASAT-ETL/1.0` y usa los certificados de `certifi`.
+- El Dockerfile copia `data/processed/`: cualquier archivo nuevo ahí llega al despliegue en Cloud Run.
+
+## Cifras verificadas (úsalas tal cual en la demo y el envío)
+
+- Validación fuera de muestra 2021–2024, mensual: MAPE **89,85 % antes → 15,12 % después**, sesgo +4,02 %, r = 0,988 (`calendar_summary.json`).
+- Limpieza: 2 439 271 → 2 168 246 focos; los 150 000 de confianza baja están recontados en los CSV (la cifra redonda es real).
+- Con límites INEI: Cusco 2024 = 9 508 focos; 25 departamentos.
+
+## Pendiente para el envío (revisar al empezar cada sesión)
+
+- Confirmar en git y abrir PR del trabajo de la rama de mapa; desplegar.
+- Los ocho campos de la página del proyecto y la demo (`docs/08-envio.md`), con declaración de uso de IA.
+- Referencias: además de NASA FIRMS, INEI (Geoservidor WFS/WMS `ig_departamento`, `ig_provincia`, `ig_distrito`), NASA GIBS, OpenStreetMap, H3, DuckDB, FastAPI y Leaflet.
+- El documento técnico del equipo (Google Docs) tiene afirmaciones que no coinciden con el código: diccionario de datos con columnas inexistentes, §7 presentado como código real, "polígonos con `unary_union`" y cifras no medidas (< 300 ms, 60 fps). El INEI ya se usa para elegir el área, pero no en la columna `department` del ETL.
+- Decidir si el título de la pestaña del navegador ("NASAT · Calendario de quema") pasa a usar el nombre del reto.
 
 ## Archivos grandes y contexto de IA
 

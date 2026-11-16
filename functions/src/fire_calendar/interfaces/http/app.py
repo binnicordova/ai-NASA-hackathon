@@ -18,11 +18,15 @@ from fire_calendar.calendar.application.use_cases import (
     GetActiveCells,
     GetAnomaly,
     GetBurnCalendar,
+    GetDailyActivity,
     GetDepartmentRanking,
+    GetHotspotPoints,
 )
 from fire_calendar.calendar.infrastructure.duckdb_gateway import DuckDbHarmonizedSeriesGateway
 from fire_calendar.hotspots.application.export_csv import ExportActivityCsv, ExportHotspotsCsv, stream_csv
-from fire_calendar.shared.kernel import AreaOfInterest, BoundingBox, DateRange, DomainError, YearMonth
+from datetime import date
+
+from fire_calendar.shared.kernel import AreaOfInterest, BoundingBox, DayRange, DomainError, YearMonth, parse_polygon
 
 from . import presenters
 
@@ -36,7 +40,7 @@ CAVEATS = [
     "A fire event is a group of hot spots whose buffers touch on the same day; a multi-day fire counts once per day.",
     "Raw hot spots and fire events are not comparable across years because the number of sensors changes.",
     "Activity before mid-2002 is extrapolated from Terra only and has low confidence.",
-    "Departments are assigned with approximate outlines.",
+    "Departments and districts follow official INEI boundaries, assigned by H3 cell (~36 km²).",
     "This service describes past and current activity. It does not predict fires.",
 ]
 
@@ -47,11 +51,14 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | None = None) -> FastAPI:
         events_parquet=DATA_DIR / "fire_events.parquet",
         summary_json=DATA_DIR / "calendar_summary.json",
         hotspots_parquet=DATA_DIR / "hotspots_clean.parquet",
+        limits_json=DATA_DIR / "peru_limits.json",
     )
     get_calendar = GetBurnCalendar(gateway)
     get_anomaly = GetAnomaly(gateway)
     get_cells = GetActiveCells(gateway)
     get_ranking = GetDepartmentRanking(gateway)
+    get_daily = GetDailyActivity(gateway)
+    get_points = GetHotspotPoints(gateway)
     export_csv = ExportActivityCsv(gateway)
     export_hotspots = ExportHotspotsCsv(gateway)
 
@@ -63,13 +70,17 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | None = None) -> FastAPI:
     async def domain_error(_: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
-    def area_from(department: str | None, bbox: str | None) -> AreaOfInterest:
-        if department and bbox:
-            raise DomainError("Usa departamento o caja, no ambos")
+    def area_from(department: str | None, bbox: str | None, district: str | None = None, polygon: str | None = None) -> AreaOfInterest:
+        if sum(bool(x) for x in (department, bbox, district, polygon)) > 1:
+            raise DomainError("Usa un solo tipo de área: departamento, distrito, caja o polígono")
         if bbox:
             return AreaOfInterest.of_bbox(BoundingBox.parse(bbox))
         if department:
             return AreaOfInterest.of_department(department)
+        if district:
+            return AreaOfInterest.of_district(district)
+        if polygon:
+            return AreaOfInterest.of_polygon(parse_polygon(polygon))
         return AreaOfInterest.country()
 
     def period_from(text: str | None) -> YearMonth | None:
@@ -77,8 +88,14 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | None = None) -> FastAPI:
 
     department_q = Query(None, description="Nombre del departamento")
     bbox_q = Query(None, description="Caja oeste,sur,este,norte en grados decimales")
-    from_q = Query(None, alias="from", description="Mes inicial AAAA-MM")
-    to_q = Query(None, alias="to", description="Mes final AAAA-MM")
+    district_q = Query(None, description="Ubigeo del distrito (6 dígitos, límites oficiales del INEI)")
+    polygon_q = Query(None, description="Polígono lon,lat;lon,lat;... (se ajusta a las celdas H3 cuyo centro cae dentro)")
+    from_q = Query(None, alias="from", description="Inicio AAAA-MM-DD (o AAAA-MM: primer día del mes)")
+    to_q = Query(None, alias="to", description="Fin AAAA-MM-DD (o AAAA-MM: último día del mes)")
+
+    def days_from(start: str | None, end: str | None) -> DayRange:
+        first, last = gateway.date_span()
+        return DayRange.parse(start, end, date.fromisoformat(first), date.fromisoformat(last))
 
     @app.get("/api/v1/meta")
     def meta() -> dict:
@@ -92,57 +109,82 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | None = None) -> FastAPI:
 
     @app.get("/api/v1/calendar")
     def calendar(department: str | None = department_q, bbox: str | None = bbox_q,
+              district: str | None = district_q, polygon: str | None = polygon_q,
                  start: str | None = from_q, end: str | None = to_q) -> dict:
-        return presenters.calendar_json(get_calendar(area_from(department, bbox), period_from(start), period_from(end)))
+        return presenters.calendar_json(get_calendar(area_from(department, bbox, district, polygon), period_from(start), period_from(end)))
 
     @app.get("/api/v1/anomaly")
     def anomaly(department: str | None = department_q, bbox: str | None = bbox_q,
+              district: str | None = district_q, polygon: str | None = polygon_q,
                 month: str | None = Query(None, description="Mes AAAA-MM; por defecto el mes en curso")) -> dict:
-        return presenters.anomaly_json(get_anomaly(area_from(department, bbox), period_from(month)))
+        return presenters.anomaly_json(get_anomaly(area_from(department, bbox, district, polygon), period_from(month)))
+
+    @app.get("/api/v1/limits")
+    def limits() -> dict:
+        """Departamentos y distritos oficiales (INEI) para elegir el área."""
+        data = gateway.limits()
+        if data is None:
+            raise DomainError("Los límites oficiales no están disponibles en este despliegue")
+        return data
+
+    @app.get("/api/v1/boundary")
+    def boundary(department: str | None = department_q, district: str | None = district_q) -> dict:
+        """Contorno oficial simplificado del departamento o distrito, como Feature GeoJSON."""
+        area = area_from(department, None, district, None)
+        geometry = gateway.boundary(area)
+        if geometry is None:
+            raise DomainError("No hay contorno oficial para esa área")
+        return {"type": "Feature", "geometry": geometry, "properties": {"label": area.label}}
+
+    @app.get("/api/v1/daily")
+    def daily(department: str | None = department_q, bbox: str | None = bbox_q,
+              district: str | None = district_q, polygon: str | None = polygon_q) -> dict:
+        return presenters.daily_json(get_daily(area_from(department, bbox, district, polygon)))
 
     @app.get("/api/v1/cells")
-    def cells(month: str = Query(..., description="Mes AAAA-MM"),
-              department: str | None = department_q, bbox: str | None = bbox_q) -> dict:
-        return presenters.cells_geojson(get_cells(area_from(department, bbox), YearMonth.parse(month)))
+    def cells(month: str | None = Query(None, description="Mes AAAA-MM (atajo de from/to)"),
+              department: str | None = department_q, bbox: str | None = bbox_q,
+              district: str | None = district_q, polygon: str | None = polygon_q,
+              start: str | None = from_q, end: str | None = to_q) -> dict:
+        days = days_from(month, month) if month else days_from(start, end)
+        return presenters.cells_geojson(get_cells(area_from(department, bbox, district, polygon), days))
+
+    @app.get("/api/v1/points")
+    def points(department: str | None = department_q, bbox: str | None = bbox_q,
+              district: str | None = district_q, polygon: str | None = polygon_q,
+               start: str | None = from_q, end: str | None = to_q,
+               limit: int = Query(20_000, description="Máximo de focos devueltos, los más recientes primero")) -> dict:
+        return presenters.points_json(get_points(area_from(department, bbox, district, polygon), days_from(start, end), limit))
 
     @app.get("/api/v1/ranking")
     def ranking(start: str | None = from_q, end: str | None = to_q) -> list[dict]:
-        first, last = gateway.date_span()
-        date_range = DateRange(period_from(start) or YearMonth.parse(first), period_from(end) or YearMonth.parse(last))
-        return presenters.ranking_json(get_ranking(date_range))
+        return presenters.ranking_json(get_ranking(days_from(start, end)))
 
     def csv_response(chunks, name: str) -> StreamingResponse:
         return StreamingResponse(chunks, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
-    def export_range(start: str | None, end: str | None) -> DateRange:
-        first, last = gateway.date_span()
-        return DateRange(period_from(start) or YearMonth.parse(first), period_from(end) or YearMonth.parse(last))
-
     @app.get("/api/v1/hotspots.csv")
     def hotspots_csv(department: str | None = department_q, bbox: str | None = bbox_q,
+              district: str | None = district_q, polygon: str | None = polygon_q,
                      start: str | None = from_q, end: str | None = to_q) -> StreamingResponse:
-        area, date_range = area_from(department, bbox), export_range(start, end)
-        return csv_response(export_hotspots(area, date_range), f"hotspots_{area.kind}_{date_range.start}_{date_range.end}.csv")
+        area, days = area_from(department, bbox, district, polygon), days_from(start, end)
+        return csv_response(export_hotspots(area, days), f"hotspots_{area.kind}_{days}.csv")
 
     @app.get("/api/v1/calendar.csv")
     def calendar_csv(department: str | None = department_q, bbox: str | None = bbox_q,
+              district: str | None = district_q, polygon: str | None = polygon_q,
                      start: str | None = from_q, end: str | None = to_q) -> StreamingResponse:
-        area = area_from(department, bbox)
+        area = area_from(department, bbox, district, polygon)
         result = get_calendar(area, period_from(start), period_from(end))
         name = f"burn-calendar_{area.kind}_{result.date_range.start}_{result.date_range.end}.csv"
         return csv_response(stream_csv(presenters.SERIES_COLUMNS, presenters.series_rows(result)), name)
 
     @app.get("/api/v1/export.csv")
     def export(department: str | None = department_q, bbox: str | None = bbox_q,
+              district: str | None = district_q, polygon: str | None = polygon_q,
                start: str | None = from_q, end: str | None = to_q) -> StreamingResponse:
-        first, last = gateway.date_span()
-        area = area_from(department, bbox)
-        date_range = DateRange(period_from(start) or YearMonth.parse(first), period_from(end) or YearMonth.parse(last))
-        name = f"fire-activity_{area.kind}_{date_range.start}_{date_range.end}.csv"
-        return StreamingResponse(
-            export_csv(area, date_range), media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="{name}"'},
-        )
+        area, days = area_from(department, bbox, district, polygon), days_from(start, end)
+        return csv_response(export_csv(area, days), f"fire-activity_{area.kind}_{days}.csv")
 
     if WEB_DIST.exists():  # un solo despliegue: la API sirve también la web compilada
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")

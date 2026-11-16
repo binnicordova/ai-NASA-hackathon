@@ -7,7 +7,7 @@ import io
 from collections.abc import Iterable, Iterator
 
 from fire_calendar.calendar.domain.ports import HarmonizedSeriesGateway
-from fire_calendar.shared.kernel import AreaOfInterest, DateRange
+from fire_calendar.shared.kernel import AreaOfInterest, DayRange
 
 # Un foco de calor por fila: lo que pide el enunciado ("CSV de los focos detectados en la búsqueda").
 HOTSPOT_COLUMNS = (
@@ -45,13 +45,13 @@ class ExportHotspotsCsv:
     def available(self) -> bool:
         return self._gateway.has_hotspot_points()
 
-    def __call__(self, area: AreaOfInterest, date_range: DateRange) -> Iterator[str]:
-        return stream_csv(HOTSPOT_COLUMNS, self._gateway.export_hotspot_rows(area, date_range))
+    def __call__(self, area: AreaOfInterest, days: DayRange) -> Iterator[str]:
+        return stream_csv(HOTSPOT_COLUMNS, self._gateway.export_hotspot_rows(area, days))
 
 
 class ExportActivityCsv:
     def __init__(self, gateway: HarmonizedSeriesGateway) -> None:
         self._gateway = gateway
 
-    def __call__(self, area: AreaOfInterest, date_range: DateRange) -> Iterator[str]:
-        return stream_csv(CELL_DAY_COLUMNS, self._gateway.export_rows(area, date_range))
+    def __call__(self, area: AreaOfInterest, days: DayRange) -> Iterator[str]:
+        return stream_csv(CELL_DAY_COLUMNS, self._gateway.export_rows(area, days))

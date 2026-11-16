@@ -1,12 +1,14 @@
 import type { AreaOfInterest } from '../area-of-interest/domain/area';
 import type { Selection } from '../calendar/application/calendarController';
 import type { Metric } from '../calendar/domain/types';
-import { monthKey, parseMonthKey } from './format';
+import { isDay, monthEnd, parseMonthKey } from './format';
 
 /** La selección vive en la URL para poder compartir una vista con un enlace. */
 export function writeUrlState(selection: Selection): void {
   const params = new URLSearchParams();
   if (selection.area.kind === 'department') params.set('department', selection.area.department);
+  if (selection.area.kind === 'district') params.set('district', selection.area.ubigeo);
+  if (selection.area.kind === 'polygon') params.set('polygon', selection.area.ring.map(([lon, lat]) => `${lon},${lat}`).join(';'));
   if (selection.area.kind === 'bbox') {
     const b = selection.area.bbox;
     params.set('bbox', [b.west, b.south, b.east, b.north].map((v) => v.toFixed(3)).join(','));
@@ -14,7 +16,8 @@ export function writeUrlState(selection: Selection): void {
   if (selection.from) params.set('from', selection.from);
   if (selection.to) params.set('to', selection.to);
   if (selection.metric !== 'harmonized') params.set('metric', selection.metric);
-  if (selection.month) params.set('month', monthKey(selection.month.year, selection.month.month));
+  if (selection.overlay) params.set('points', '1');
+  if (selection.buffers === 'overlap') params.set('buffers', 'overlap');
   history.replaceState(null, '', `#${params.toString()}`);
 }
 
@@ -23,20 +26,23 @@ export function readUrlState(): Partial<Selection> {
   const state: Partial<Selection> = {};
   const department = params.get('department');
   const box = params.get('bbox')?.split(',').map(Number);
+  const district = params.get('district');
+  const ring = params.get('polygon')?.split(';').map((pair) => pair.split(',').map(Number) as [number, number]);
   if (department) state.area = { kind: 'department', department } satisfies AreaOfInterest;
+  else if (district && /^\d{6}$/.test(district)) state.area = { kind: 'district', ubigeo: district, name: '', department: '' };
+  else if (ring && ring.length >= 3 && ring.every((p) => p.length === 2 && p.every(Number.isFinite))) state.area = { kind: 'polygon', ring };
   else if (box && box.length === 4 && box.every(Number.isFinite)) {
     state.area = { kind: 'bbox', bbox: { west: box[0]!, south: box[1]!, east: box[2]!, north: box[3]! } };
   }
-  const from = params.get('from');
-  const to = params.get('to');
-  if (from && parseMonthKey(from)) state.from = from;
-  if (to && parseMonthKey(to)) state.to = to;
-  const metric = params.get('metric');
-  if (metric === 'hotspots' || metric === 'events') state.metric = metric as Metric;
-  const month = parseMonthKey(params.get('month') ?? '');
-  if (month) {
-    state.month = month;
-    state.inspectedYear = month.year;
-  }
+  // Días AAAA-MM-DD; los enlaces antiguos con meses AAAA-MM se leen como meses completos.
+  const from = params.get('from') ?? '';
+  const to = params.get('to') ?? '';
+  if (isDay(from)) state.from = from;
+  else if (parseMonthKey(from)) state.from = `${from}-01`;
+  if (isDay(to)) state.to = to;
+  else if (parseMonthKey(to)) state.to = monthEnd(to);
+  if (params.get('metric') === 'hotspots') state.metric = 'hotspots' satisfies Metric;
+  if (params.get('points') === '1') state.overlay = true;
+  if (params.get('buffers') === 'overlap') state.buffers = 'overlap';
   return state;
 }

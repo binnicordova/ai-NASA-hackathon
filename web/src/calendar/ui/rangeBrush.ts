@@ -1,22 +1,25 @@
 import { el } from '../../shared/dom';
-import { fmt, monthKey, monthLabel } from '../../shared/format';
-import { t } from '../../shared/i18n';
-import { metricNoun, metricValue, type BurnCalendar, type Metric } from '../domain/types';
+import { addDays, dayLabel, dayNumber, fmt, monthEnd, monthLabel } from '../../shared/format';
+import { monthNames, t } from '../../shared/i18n';
+import { metricNoun, type DailySeries, type DayRange, type Metric } from '../domain/types';
 
 interface Handlers {
-  /** Rango nuevo, en claves `YYYY-MM`. Se llama al soltar, no en cada píxel. */
+  /** Rango nuevo, en días `AAAA-MM-DD`. Se llama al soltar, no en cada píxel. */
   onRange: (from: string, to: string) => void;
-  onSelect: (year: number, month: number) => void;
 }
 
 type Drag = { mode: 'start' | 'end' | 'move' | 'new'; pointer: number; x: number; anchor: number; from: number; to: number; moved: boolean };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const KEY_STEP: Record<string, number> = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -12, PageUp: 12 };
+/** Con más de dos años a la vista se elige por meses; con menos, por días. */
+const MONTH_MODE_DAYS = 730;
+/** Lo más cerca que se puede acercar la vista: dos semanas. */
+const MIN_VIEW_DAYS = 14;
+const VIIRS_START = '2012-01-20';
 
 /**
- * Selector de rango tipo "brush": la actividad mensual de 2000 a hoy como fondo y una ventana que se arrastra
- * para acercar o desplazar el periodo. Un clic sin arrastre elige ese mes.
+ * Línea de tiempo con inicio y fin: la actividad de fondo, una ventana que se arrastra para elegir el rango y zoom
+ * (rueda, botones o doble clic) para pasar de años a días. Lejos se elige por meses; cerca, por días.
  */
 export class RangeBrush {
   private readonly chart = document.createElementNS(SVG_NS, 'svg');
@@ -26,24 +29,36 @@ export class RangeBrush {
   private readonly window = el('div', { className: 'brush-window' });
   private readonly startHandle = el('div', { className: 'brush-handle', tabIndex: 0 });
   private readonly endHandle = el('div', { className: 'brush-handle', tabIndex: 0 });
-  private readonly cursor = el('div', { className: 'brush-cursor' });
   private readonly era = el('div', { className: 'brush-era' });
   private readonly tip = el('div', { className: 'brush-tip', hidden: true });
   private readonly track = el('div', { className: 'brush-track' });
+  private readonly flags = el('div', { className: 'brush-flags' });
+  private readonly startFlag = el('span', { className: 'brush-flag start' });
+  private readonly endFlag = el('span', { className: 'brush-flag end' });
   private readonly axis = el('div', { className: 'brush-axis' });
 
-  private keys: string[] = [];
+  private daily: DailySeries | null = null;
+  private metric: Metric = 'harmonized';
+  private origin = 0; // número de día del índice 0
+  private n = 0;
   private from = 0;
   private to = 0;
+  /** Vista visible, en días desde el origen: [v0, v1). */
+  private v0 = 0;
+  private v1 = 1;
   private drag: Drag | null = null;
   private keyTimer = 0;
+  private frame = 0;
+  private lastRange = '';
 
   constructor(
     root: HTMLElement,
     private readonly rangeText: HTMLElement,
+    private readonly viewText: HTMLElement,
     private readonly handlers: Handlers,
   ) {
     this.chart.setAttribute('class', 'brush-chart');
+    this.chart.setAttribute('viewBox', '0 0 1000 100');
     this.chart.setAttribute('preserveAspectRatio', 'none');
     this.chart.setAttribute('aria-hidden', 'true');
     this.chart.append(this.area);
@@ -53,8 +68,9 @@ export class RangeBrush {
       handle.addEventListener('keydown', (event) => this.onKey(event, handle === this.startHandle));
     }
     this.window.append(this.startHandle, this.endHandle);
-    this.track.append(this.chart, this.era, this.dimLeft, this.dimRight, this.window, this.cursor, this.tip);
-    root.replaceChildren(this.track, this.axis);
+    this.track.append(this.chart, this.era, this.dimLeft, this.dimRight, this.window, this.tip);
+    this.flags.append(this.startFlag, this.endFlag);
+    root.replaceChildren(this.flags, this.track, this.axis);
 
     // Eventos de puntero: el mismo código sirve para ratón, lápiz y dedo.
     this.track.addEventListener('pointerdown', (event) => this.onDown(event));
@@ -62,86 +78,248 @@ export class RangeBrush {
     this.track.addEventListener('pointerup', (event) => this.onUp(event));
     this.track.addEventListener('pointercancel', () => this.cancel());
     this.track.addEventListener('pointerleave', () => !this.drag && (this.tip.hidden = true));
-    this.track.addEventListener('dblclick', () => this.commit(0, this.keys.length - 1));
-    new ResizeObserver(() => this.renderAxis()).observe(this.track);
+    this.track.addEventListener('wheel', (event) => this.onWheel(event), { passive: false });
+    this.track.addEventListener('dblclick', () => this.fitSelection());
+    new ResizeObserver(() => this.paint()).observe(this.track);
   }
 
-  render(calendar: BurnCalendar, metric: Metric, selected: { year: number; month: number } | null): void {
-    const series = calendar.series;
-    this.keys = series.map((p) => monthKey(p.year, p.month));
-    const n = this.keys.length;
-    if (!n) return;
-    const index = new Map(this.keys.map((key, i) => [key, i]));
-    this.from = index.get(calendar.range.from) ?? 0;
-    this.to = index.get(calendar.range.to) ?? n - 1;
-
-    const values = series.map((p) => metricValue(p, metric));
-    const max = Math.max(1, ...values);
-    const y = (v: number): string => (100 - (92 * v) / max).toFixed(1);
-    this.chart.setAttribute('viewBox', `0 0 ${n} 100`);
-    this.area.setAttribute('d', `M0,100 ${values.map((v, i) => `L${i},${y(v)} L${i + 1},${y(v)}`).join(' ')} L${n},100 Z`);
-
-    const viirs = index.get('2012-02');
-    this.era.hidden = viirs === undefined;
-    if (viirs !== undefined) {
-      this.era.style.left = this.pct(viirs);
-      this.era.textContent = t('brush.viirs');
+  render(daily: DailySeries, range: DayRange, metric: Metric): void {
+    const dataChanged = daily !== this.daily;
+    this.daily = daily;
+    this.metric = metric;
+    this.origin = dayNumber(daily.start);
+    this.n = daily.harmonized.length;
+    if (!this.drag) {
+      this.from = this.clampIndex(dayNumber(range.from) - this.origin);
+      this.to = this.clampIndex(dayNumber(range.to) - this.origin);
     }
-
-    const selectedIndex = selected ? index.get(monthKey(selected.year, selected.month)) : undefined;
-    this.cursor.hidden = selectedIndex === undefined;
-    if (selectedIndex !== undefined) {
-      this.cursor.style.left = this.pct(selectedIndex + 0.5);
-      this.cursor.title = `${monthLabel(selected!.year, selected!.month)}: ${fmt(values[selectedIndex]!)} ${metricNoun(metric)}`;
+    // La primera vez, o si la serie nueva no cabe en la vista actual, se ve todo; si no, se conserva el zoom.
+    if (dataChanged && (this.v1 - this.v0 <= 1 || this.v1 > this.n)) this.setView(0, this.n);
+    // Si el rango cambió desde fuera (enlace, fechas, calendario) y quedó fuera de la vista, la vista lo sigue.
+    const key = `${range.from}|${range.to}`;
+    if (key !== this.lastRange) {
+      // Al abrir un enlace con un rango corto (menos de un 5 % de la serie), se entra ya acercado a él.
+      const firstShortRange = this.lastRange === '' && (this.to - this.from + 1) * 20 < this.n;
+      this.lastRange = key;
+      if (firstShortRange || this.from < this.v0 || this.to + 1 > this.v1) {
+        const pad = Math.max(2, (this.to - this.from + 1) * 0.15);
+        this.setView(this.from - pad, this.to + 1 + pad);
+      }
     }
     this.track.setAttribute('aria-label', t('brush.label'));
-    this.paintWindow(this.from, this.to);
-    this.renderAxis();
+    this.paint();
+  }
+
+  // --- zoom público (botones) ----------------------------------------------------
+
+  /** Acerca (factor < 1) o aleja (factor > 1) alrededor del centro de la selección. */
+  zoomBy(factor: number): void {
+    const center = Math.min(Math.max((this.from + this.to + 1) / 2, this.v0), this.v1);
+    this.zoomAround(center, factor);
+  }
+
+  /** Encuadra la vista en el rango elegido, con un margen a cada lado. */
+  fitSelection(): void {
+    const span = this.to - this.from + 1;
+    const pad = Math.max(2, span * 0.15);
+    this.setView(this.from - pad, this.to + 1 + pad);
+    this.paint();
+  }
+
+  showAll(): void {
+    this.setView(0, this.n);
+    this.paint();
+  }
+
+  // --- geometría -----------------------------------------------------------------
+
+  private clampIndex(i: number): number {
+    return Math.min(this.n - 1, Math.max(0, Math.round(i)));
+  }
+
+  private setView(v0: number, v1: number): void {
+    let span = Math.min(this.n, Math.max(MIN_VIEW_DAYS, v1 - v0));
+    let start = v0 + (v1 - v0 - span) / 2;
+    start = Math.min(this.n - span, Math.max(0, start));
+    if (span > this.n) span = this.n;
+    this.v0 = start;
+    this.v1 = start + span;
+  }
+
+  private zoomAround(at: number, factor: number): void {
+    const span = this.v1 - this.v0;
+    const next = Math.min(this.n, Math.max(MIN_VIEW_DAYS, span * factor));
+    const ratio = (at - this.v0) / span;
+    this.setView(at - ratio * next, at - ratio * next + next);
+    this.schedulePaint();
+  }
+
+  private get monthMode(): boolean {
+    return this.v1 - this.v0 > MONTH_MODE_DAYS;
+  }
+
+  private pct(i: number): string {
+    return `${((100 * (i - this.v0)) / (this.v1 - this.v0)).toFixed(3)}%`;
+  }
+
+  private iso(i: number): string {
+    return addDays(this.daily!.start, i);
+  }
+
+  private label(i: number): string {
+    const iso = this.iso(i);
+    return this.monthMode ? monthLabel(Number(iso.slice(0, 4)), Number(iso.slice(5, 7))) : dayLabel(iso);
+  }
+
+  /** Índices del primer y último día del mes que contiene al día i. */
+  private monthBounds(i: number): [number, number] {
+    const key = this.iso(i).slice(0, 7);
+    return [this.clampIndex(dayNumber(`${key}-01`) - this.origin), this.clampIndex(dayNumber(monthEnd(key)) - this.origin)];
+  }
+
+  private values(): number[] {
+    return this.daily![this.metric];
   }
 
   // --- pintar ------------------------------------------------------------------
 
-  private pct(i: number): string {
-    return `${((100 * i) / Math.max(1, this.keys.length)).toFixed(3)}%`;
+  private schedulePaint(): void {
+    cancelAnimationFrame(this.frame);
+    this.frame = requestAnimationFrame(() => this.paint());
   }
 
-  private label(i: number): string {
-    const [year, month] = this.keys[i]!.split('-').map(Number);
-    return monthLabel(year!, month!);
+  private paint(): void {
+    if (!this.daily || !this.n) return;
+    this.paintChart();
+    this.paintWindow(this.from, this.to);
+    this.paintAxis();
+    const viirs = dayNumber(VIIRS_START) - this.origin;
+    this.era.hidden = viirs < this.v0 || viirs > this.v1;
+    this.era.style.left = this.pct(viirs);
+    this.era.textContent = t('brush.viirs');
+    this.viewText.textContent = t('brush.view', {
+      a: this.label(Math.ceil(this.v0)), b: this.label(Math.min(this.n - 1, Math.floor(this.v1 - 0.001))),
+      unit: t(this.monthMode ? 'brush.unit.month' : 'brush.unit.day'),
+    });
+  }
+
+  /** Barras de la vista: por meses de lejos, por días de cerca. La escala se ajusta a lo visible. */
+  private paintChart(): void {
+    const values = this.values();
+    const first = Math.max(0, Math.floor(this.v0));
+    const last = Math.min(this.n - 1, Math.ceil(this.v1));
+    const bars: [number, number, number][] = [];
+    if (this.monthMode) {
+      let i = this.monthBounds(first)[0];
+      while (i <= last) {
+        const [a, b] = this.monthBounds(i);
+        let sum = 0;
+        for (let d = a; d <= b; d += 1) sum += values[d] ?? 0;
+        bars.push([a, b + 1, sum]);
+        i = b + 1;
+      }
+    } else {
+      for (let d = first; d <= last; d += 1) bars.push([d, d + 1, values[d] ?? 0]);
+    }
+    const max = Math.max(1e-9, ...bars.map((bar) => bar[2]));
+    const span = this.v1 - this.v0;
+    const x = (i: number): string => ((1000 * (i - this.v0)) / span).toFixed(2);
+    const y = (v: number): string => (100 - (92 * v) / max).toFixed(1);
+    const gap = this.monthMode ? 0 : 0.12; // un hueco fino separa las barras diarias
+    this.area.setAttribute('d', bars.filter((bar) => bar[2] > 0).map(([a, b, v]) => `M${x(a + gap)},100V${y(v)}H${x(b - gap)}V100Z`).join(''));
   }
 
   private paintWindow(from: number, to: number): void {
     this.window.style.left = this.pct(from);
-    this.window.style.width = this.pct(to - from + 1);
+    this.window.style.width = `${((100 * (to - from + 1)) / (this.v1 - this.v0)).toFixed(3)}%`;
     this.dimLeft.style.cssText = `left:0;width:${this.pct(from)}`;
     this.dimRight.style.cssText = `left:${this.pct(to + 1)};right:0`;
-    const months = to - from + 1;
-    this.rangeText.textContent = `${this.label(from)} – ${this.label(to)} · ${t('brush.months', { n: months })}`;
+    const days = to - from + 1;
+    const fromIso = this.iso(from);
+    const toIso = this.iso(to);
+    this.rangeText.textContent = `${dayLabel(fromIso)} – ${dayLabel(toIso)} · ${t('brush.days', { n: fmt(days) })}`;
+    // Inicio y fin a la vista, sobre cada asa. Si quedan muy juntos, se leen como una sola etiqueta.
+    const width = this.track.clientWidth || 600;
+    const close = ((to + 1 - from) / (this.v1 - this.v0)) * width < 150;
+    this.startFlag.textContent = close ? `${dayLabel(fromIso)} – ${dayLabel(toIso)}` : dayLabel(fromIso);
+    this.startFlag.classList.toggle('both', close);
+    this.endFlag.hidden = close;
+    this.endFlag.textContent = dayLabel(toIso);
+    // Cada etiqueta se ancla a su asa, sin salirse de la pista por ningún lado.
+    const place = (flag: HTMLElement, i: number, align: number): void => {
+      const x = ((i - this.v0) / (this.v1 - this.v0)) * width - align * flag.offsetWidth;
+      flag.style.left = `${Math.max(0, Math.min(width - flag.offsetWidth, x)).toFixed(1)}px`;
+    };
+    place(this.startFlag, close ? (from + to + 1) / 2 : from, close ? 0.5 : 0);
+    if (!close) place(this.endFlag, to + 1, 1);
     for (const [handle, i] of [[this.startHandle, from], [this.endHandle, to]] as const) {
       handle.setAttribute('aria-label', t(handle.dataset.label as 'brush.start' | 'brush.end'));
       handle.setAttribute('aria-valuemin', '0');
-      handle.setAttribute('aria-valuemax', String(this.keys.length - 1));
+      handle.setAttribute('aria-valuemax', String(this.n - 1));
       handle.setAttribute('aria-valuenow', String(i));
-      handle.setAttribute('aria-valuetext', this.label(i));
+      handle.setAttribute('aria-valuetext', dayLabel(this.iso(i)));
     }
   }
 
-  private renderAxis(): void {
-    const n = this.keys.length;
-    if (!n) return;
+  /** Marcas del eje según el zoom: años, meses o días, sin que se pisen. */
+  private paintAxis(): void {
     const width = this.track.clientWidth || 600;
-    const perYear = (width * 12) / n;
-    const step = perYear >= 34 ? 1 : perYear >= 16 ? 2 : 5;
+    const pxPerDay = width / (this.v1 - this.v0);
     const labels: HTMLElement[] = [];
-    this.keys.forEach((key, i) => {
-      const year = Number(key.slice(0, 4));
-      if (key.endsWith('-01') && year % step === 0) labels.push(el('span', { textContent: String(year), style: `left:${this.pct(i)}` }));
-    });
+    const first = Math.max(0, Math.floor(this.v0));
+    const last = Math.min(this.n - 1, Math.ceil(this.v1));
+    const add = (i: number, text: string): void => {
+      if (i >= this.v0 && i <= this.v1) labels.push(el('span', { textContent: text, style: `left:${this.pct(i)}` }));
+    };
+    if (pxPerDay * 30 < 34) {
+      // Años: cada 1, 2 o 5 según el espacio.
+      const perYear = pxPerDay * 365;
+      const step = perYear >= 40 ? 1 : perYear >= 20 ? 2 : 5;
+      for (let i = first; i <= last; i += 1) {
+        const iso = this.iso(i);
+        if (iso.endsWith('-01-01') && Number(iso.slice(0, 4)) % step === 0) add(i, iso.slice(0, 4));
+      }
+    } else if (pxPerDay < 4) {
+      // Meses (con el año en enero o en el primer mes visible).
+      const step = pxPerDay * 30 >= 56 ? 1 : 3;
+      let shownYear = false;
+      for (let i = first; i <= last; i += 1) {
+        const iso = this.iso(i);
+        const month = Number(iso.slice(5, 7));
+        if (iso.endsWith('-01') && (month - 1) % step === 0) {
+          const withYear = month === 1 || !shownYear;
+          shownYear = true;
+          add(i, withYear ? `${monthNames()[month - 1]} ${iso.slice(0, 4)}` : monthNames()[month - 1]!);
+        }
+      }
+    } else {
+      // Días: uno de cada k para dejar ~56 px entre etiquetas.
+      const k = [1, 2, 7, 14].find((step) => step * pxPerDay >= 56) ?? 14;
+      for (let i = first; i <= last; i += 1) {
+        const iso = this.iso(i);
+        const day = Number(iso.slice(8, 10));
+        // Semanas: días 1, 8, 15 y 22; quincenas: 1 y 15. Así no se juntan dos etiquetas a fin de mes.
+        const marks = k === 7 ? [1, 8, 15, 22] : [1, 15];
+        if (k === 1 || (k === 2 && day % 2 === 1 && day < 31) || (k >= 7 && marks.includes(day))) {
+          add(i, `${day} ${monthNames()[Number(iso.slice(5, 7)) - 1]}`);
+        }
+      }
+    }
     this.axis.replaceChildren(...labels);
   }
 
-  private showTip(i: number, text = this.label(i)): void {
+  private showTip(i: number, text?: string): void {
     this.tip.hidden = false;
+    if (text === undefined) {
+      const values = this.values();
+      let value = values[i] ?? 0;
+      if (this.monthMode) {
+        const [a, b] = this.monthBounds(i);
+        value = 0;
+        for (let d = a; d <= b; d += 1) value += values[d] ?? 0;
+      }
+      text = `${this.label(i)} · ${fmt(value)} ${metricNoun(this.metric)}`;
+    }
     this.tip.textContent = text;
     this.tip.style.left = this.pct(i + 0.5);
   }
@@ -150,12 +328,17 @@ export class RangeBrush {
 
   private indexAt(clientX: number): number {
     const box = this.track.getBoundingClientRect();
-    const i = Math.floor(((clientX - box.left) / box.width) * this.keys.length);
-    return Math.min(this.keys.length - 1, Math.max(0, i));
+    return this.clampIndex(Math.floor(this.v0 + ((clientX - box.left) / box.width) * (this.v1 - this.v0)));
+  }
+
+  /** Ajusta un extremo al mes completo cuando la vista está en meses. */
+  private snap(from: number, to: number): [number, number] {
+    if (!this.monthMode) return [from, to];
+    return [this.monthBounds(from)[0], this.monthBounds(to)[1]];
   }
 
   private onDown(event: PointerEvent): void {
-    if (!this.keys.length || event.button > 0) return;
+    if (!this.n || event.button > 0) return;
     const target = event.target as HTMLElement;
     const at = this.indexAt(event.clientX);
     const mode: Drag['mode'] =
@@ -163,24 +346,24 @@ export class RangeBrush {
     this.drag = { mode, pointer: event.pointerId, x: event.clientX, anchor: at, from: this.from, to: this.to, moved: false };
     this.track.setPointerCapture(event.pointerId);
     this.track.classList.add('dragging');
-    if (mode === 'start' || mode === 'end') (target as HTMLElement).focus();
+    if (mode === 'start' || mode === 'end') target.focus();
     event.preventDefault();
   }
 
   private onMove(event: PointerEvent): void {
     const drag = this.drag;
     if (!drag) {
-      if (event.pointerType === 'mouse' && this.keys.length) this.showTip(this.indexAt(event.clientX));
+      if (event.pointerType === 'mouse' && this.n) this.showTip(this.indexAt(event.clientX));
       return;
     }
     if (Math.abs(event.clientX - drag.x) > 3) drag.moved = true;
     if (!drag.moved) return;
-    const last = this.keys.length - 1;
+    const last = this.n - 1;
     const at = this.indexAt(event.clientX);
     let { from, to } = this;
-    if (drag.mode === 'start') from = Math.min(at, to);
-    else if (drag.mode === 'end') to = Math.max(at, from);
-    else if (drag.mode === 'new') [from, to] = [Math.min(drag.anchor, at), Math.max(drag.anchor, at)];
+    if (drag.mode === 'start') [from] = this.snap(Math.min(at, to), to);
+    else if (drag.mode === 'end') [, to] = this.snap(from, Math.max(at, from));
+    else if (drag.mode === 'new') [from, to] = this.snap(Math.min(drag.anchor, at), Math.max(drag.anchor, at));
     else {
       const span = this.to - this.from;
       from = Math.min(last - span, Math.max(0, this.from + at - drag.anchor));
@@ -189,7 +372,7 @@ export class RangeBrush {
     drag.from = from;
     drag.to = to;
     this.paintWindow(from, to);
-    this.showTip(drag.mode === 'start' ? from : drag.mode === 'end' ? to : at, `${this.label(from)} – ${this.label(to)}`);
+    this.showTip(drag.mode === 'start' ? from : drag.mode === 'end' ? to : at, `${dayLabel(this.iso(from))} – ${dayLabel(this.iso(to))}`);
   }
 
   private onUp(event: PointerEvent): void {
@@ -198,15 +381,24 @@ export class RangeBrush {
     this.drag = null;
     this.track.classList.remove('dragging');
     this.tip.hidden = true;
-    if (!drag.moved) {
-      // Un clic elige el mes; sobre un asa no hace nada (se está tomando el asa).
-      if (drag.mode === 'move' || drag.mode === 'new') {
-        const [year, month] = this.keys[drag.anchor]!.split('-').map(Number);
-        this.handlers.onSelect(year!, month!);
-      }
+    // Un clic sin arrastre no cambia nada: el rango se elige arrastrando.
+    if (drag.moved) this.commit(drag.from, drag.to);
+  }
+
+  private onWheel(event: WheelEvent): void {
+    if (!this.n) return;
+    event.preventDefault();
+    const box = this.track.getBoundingClientRect();
+    const at = this.v0 + ((event.clientX - box.left) / box.width) * (this.v1 - this.v0);
+    const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey;
+    if (horizontal) {
+      // Desplazar la vista sin cambiar el zoom.
+      const delta = ((event.shiftKey ? event.deltaY : event.deltaX) / box.width) * (this.v1 - this.v0);
+      this.setView(this.v0 + delta, this.v1 + delta);
+      this.schedulePaint();
       return;
     }
-    this.commit(drag.from, drag.to);
+    this.zoomAround(at, Math.exp(event.deltaY * (event.ctrlKey ? 0.01 : 0.0025)));
   }
 
   private cancel(): void {
@@ -217,31 +409,37 @@ export class RangeBrush {
   }
 
   private commit(from: number, to: number): void {
-    if (!this.keys.length || (from === this.from && to === this.to)) return;
+    if (!this.n || (from === this.from && to === this.to)) {
+      this.paintWindow(this.from, this.to);
+      return;
+    }
     this.from = from;
     this.to = to;
     this.paintWindow(from, to);
-    this.handlers.onRange(this.keys[from]!, this.keys[to]!);
+    this.handlers.onRange(this.iso(from), this.iso(to));
   }
 
   // --- teclado ---------------------------------------------------------------------
 
   private onKey(event: KeyboardEvent, isStart: boolean): void {
-    const last = this.keys.length - 1;
+    const last = this.n - 1;
     const current = isStart ? this.from : this.to;
+    // Paso de un día cerca y de un mes lejos; RePág/AvPág saltan 30 días o un año.
+    const step = this.monthMode ? 30 : 1;
+    const big = this.monthMode ? 365 : 30;
+    const keys: Record<string, number> = { ArrowLeft: -step, ArrowDown: -step, ArrowRight: step, ArrowUp: step, PageDown: -big, PageUp: big };
     let next: number;
     if (event.key === 'Home') next = isStart ? 0 : this.from;
     else if (event.key === 'End') next = isStart ? this.to : last;
-    else if (event.key in KEY_STEP) next = current + KEY_STEP[event.key]!;
+    else if (event.key in keys) next = current + keys[event.key]!;
     else return;
     event.preventDefault();
     next = isStart ? Math.max(0, Math.min(next, this.to)) : Math.min(last, Math.max(next, this.from));
-    if (isStart) this.from = next;
-    else this.to = next;
+    [this.from, this.to] = isStart ? this.snap(next, this.to) : this.snap(this.from, next);
     this.paintWindow(this.from, this.to);
     // Al pulsar varias veces seguidas, se pide un solo rango al terminar.
     window.clearTimeout(this.keyTimer);
     const [from, to] = [this.from, this.to];
-    this.keyTimer = window.setTimeout(() => this.handlers.onRange(this.keys[from]!, this.keys[to]!), 400);
+    this.keyTimer = window.setTimeout(() => this.handlers.onRange(this.iso(from), this.iso(to)), 400);
   }
 }
