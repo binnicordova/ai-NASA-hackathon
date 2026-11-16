@@ -97,10 +97,16 @@ export interface CellProperties {
 
 export type CellCollection = GeoJSON.FeatureCollection<GeoJSON.Polygon, CellProperties>;
 
-export const metricLabel = (metric: Metric): string => t(`metric.${metric}.label`);
-export const metricNoun = (metric: Metric): string => t(`metric.${metric}.noun`);
+/**
+ * Qué cuentan los gráficos. En la pestaña de focos crudos se cuentan los **eventos** (el resultado de disolver los
+ * buffers de cada día), no los focos sueltos: varios focos de un mismo fuego cuentan una vez.
+ */
+export type Measure = Metric | 'events';
 
-export const metricValue = (point: Counts, metric: Metric): number => point[metric];
+export const metricLabel = (metric: Measure): string => t(`metric.${metric}.label`);
+export const metricNoun = (metric: Measure): string => t(`metric.${metric}.noun`);
+
+export const metricValue = (point: Counts, metric: Measure): number => (metric === 'events' ? point.events ?? 0 : point[metric]);
 
 /** Serie diaria densa: el valor i es del día `start` + i. Fondo de la línea de tiempo y totales del rango. */
 export interface DailySeries {
@@ -135,6 +141,7 @@ export interface Limits {
   retrieved: string;
   rule: string;
   departments: { code: string; name: string }[];
+  provinces: { code: string; name: string; department: string }[];
   districts: { ubigeo: string; name: string; province: string; department: string }[];
 }
 
@@ -162,4 +169,59 @@ export interface PointSample {
 export interface DayRange {
   from: string;
   to: string;
+}
+
+/** Nivel de los límites oficiales en el mapa de alerta temprana: lo decide el área elegida. */
+export type RiskLevel = 'department' | 'province' | 'district';
+
+/** Prueba fuera de muestra de la predicción. */
+export interface ForecastCheck {
+  train: [number, number];
+  test: [number, number];
+  cases: number;
+  brier: number;
+  brierReference: number;
+  skill: number;
+  /** Fracción de casos dentro del rango del 80 % (con Poisson-Gamma donde hace falta). */
+  coverage: number;
+  /** La misma fracción si el rango fuera Poisson puro. */
+  poissonCoverage: number;
+  /** Mediana de varianza / media (1 = Poisson). */
+  dispersion: number;
+}
+
+export interface ForecastYears {
+  from: number;
+  to: number;
+  count: number;
+}
+
+/** Predicción por mes (enero a diciembre) de cada límite oficial de un nivel. */
+export interface Forecast {
+  level: RiskLevel;
+  sensor: string;
+  years: ForecastYears;
+  range: [number, number];
+  units: { key: string; name: string; parent: string; expected: number[]; pAny: number[]; low: number[]; high: number[] }[];
+  check: ForecastCheck | null;
+}
+
+export interface MonthForecast {
+  month: number;
+  /** λ: eventos esperados. */
+  expected: number;
+  /** Probabilidad de al menos un evento. */
+  pAny: number;
+  low: number;
+  high: number;
+  years: number;
+  yearsWithEvents: number;
+  overdispersed: boolean;
+}
+
+export interface AreaForecast {
+  sensor: string;
+  years: ForecastYears;
+  range: [number, number];
+  months: MonthForecast[];
 }

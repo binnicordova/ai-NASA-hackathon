@@ -8,12 +8,16 @@ from fire_calendar.shared.kernel import AreaOfInterest, DateRange, DayRange, Dom
 
 from ..domain import services
 from ..domain.model import (
+    REFERENCE_START_YEAR,
     ActivityLevels,
     Anomaly,
     HarmonizedSeries,
     HistoricalMedian,
+    ForecastMap,
+    MonthForecast,
     PeakSeason,
     RangeSummary,
+    UnitForecast,
     YearlyTotal,
 )
 from ..domain.ports import ActiveCell, DailyActivity, DepartmentTotal, HarmonizedSeriesGateway, HotspotSample
@@ -108,3 +112,47 @@ class GetDepartmentRanking:
 
     def __call__(self, days: DayRange) -> list[DepartmentTotal]:
         return sorted(self._gateway.department_totals(days), key=lambda d: -d.harmonized)
+
+
+LEVELS = ("department", "province", "district")
+# Prueba fuera de muestra: los mismos años de prueba que la validación de la armonización (desde 2021).
+CHECK_TEST_START = 2021
+
+
+class GetFireForecast:
+    """Predicción de fuego por mes: eventos esperados (λ), probabilidad de al menos uno y rango del 80 %.
+
+    Modelo de Poisson sobre los eventos MODIS del mismo mes en años anteriores (Poisson-Gamma cuando los años varían
+    más de lo que admite un Poisson). Es estacional: no usa clima ni lo que va del año. La prueba fuera de muestra
+    dice cuánto se cumplió en años que no se usaron para ajustarlo.
+    """
+
+    def __init__(self, gateway: HarmonizedSeriesGateway) -> None:
+        self._gateway = gateway
+        self._maps: dict[str, ForecastMap] = {}
+
+    def _years(self) -> tuple[int, int]:
+        # Años completos con Terra y Aqua: de 2003 al año pasado.
+        last_year = int(self._gateway.date_span()[1][:4])
+        return REFERENCE_START_YEAR, last_year - 1
+
+    def by_unit(self, level: str) -> ForecastMap:
+        if level not in LEVELS:
+            raise DomainError(f"Nivel desconocido: {level}. Usa department, province o district")
+        if level not in self._maps:
+            first, last = self._years()
+            years = list(range(first, last + 1))
+            totals = self._gateway.unit_month_events(level)
+            units = tuple(
+                UnitForecast(key, name, parent, services.forecast_months(totals.get(key, {}), years))
+                for key, name, parent in self._gateway.units(level)
+            )
+            check = services.forecast_check(totals, [u.key for u in units], (first, CHECK_TEST_START - 1), (CHECK_TEST_START, last))
+            self._maps[level] = ForecastMap(level, (first, last), units, check)
+        return self._maps[level]
+
+    def for_area(self, area: AreaOfInterest) -> tuple[tuple[int, int], tuple[MonthForecast, ...]]:
+        series = self._gateway.monthly_series(area)
+        first, last = self._years()
+        counts = {(m.period.year, m.period.month): m.events_modis or 0 for m in series.months}
+        return (first, last), services.forecast_months(counts, list(range(first, last + 1)))

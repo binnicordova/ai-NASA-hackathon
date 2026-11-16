@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 
 from fire_calendar.shared.kernel import DateRange, YearMonth
 
 from .model import (
+    FORECAST_RANGE,
     MIN_YEARS_FOR_ANOMALY,
     VIIRS_START_YEAR,
     ActivityLevels,
@@ -15,7 +17,9 @@ from .model import (
     HarmonizedSeries,
     HistoricalMedian,
     MonthFrequency,
+    MonthForecast,
     PeakSeason,
+    ForecastCheck,
     RangeSummary,
     YearlyTotal,
 )
@@ -170,4 +174,100 @@ def range_summary(series: HarmonizedSeries, date_range: DateRange) -> RangeSumma
         events_modis=sum(m.events_modis or 0 for m in months) if has_events else None,
         harmonized=sum(m.harmonized for m in months),
         mixes_sensor_eras=date_range.start.year < VIIRS_START_YEAR <= date_range.end.year,
+    )
+
+
+# --- Predicción de fuego (Poisson) ------------------------------------------------------------------------
+
+
+def _poisson_pmf(lam: float):
+    term = math.exp(-lam)
+    k = 0
+    while True:
+        yield k, term
+        k += 1
+        term *= lam / k
+
+
+def _gamma_poisson_pmf(lam: float, r: float):
+    """Poisson cuya tasa varía de un año a otro según una gamma (binomial negativa con media λ y forma r)."""
+    p = r / (r + lam)
+    term = p**r
+    k = 0
+    while True:
+        yield k, term
+        term *= (k + r) / (k + 1) * (1 - p)
+        k += 1
+
+
+def _quantile(pmf, q: float) -> int:
+    total = 0.0
+    for k, term in pmf:
+        total += term
+        if total >= q - 1e-12 or k > 100_000:
+            return k
+    return 0  # pragma: no cover
+
+
+def month_forecast(counts: Sequence[int], month: int) -> MonthForecast:
+    """Eventos esperados en un mes, a partir de sus conteos en años anteriores.
+
+    λ es la media. Si los años varían más de lo que admite un Poisson (varianza > media), la probabilidad y el
+    rango salen de un Poisson-Gamma con la misma media: así el rango no promete una precisión que los datos no dan.
+    """
+    n = len(counts)
+    lam = sum(counts) / n if n else 0.0
+    var = sum((c - lam) ** 2 for c in counts) / (n - 1) if n > 1 else 0.0
+    hits = sum(1 for c in counts if c > 0)
+    if lam == 0:
+        return MonthForecast(month, 0.0, 0.0, 0, 0, n, hits, False)
+    overdispersed = var > lam * 1.05
+    if overdispersed:
+        r = lam * lam / (var - lam)
+        p_any = 1 - (r / (r + lam)) ** r
+        low = _quantile(_gamma_poisson_pmf(lam, r), FORECAST_RANGE[0])
+        high = _quantile(_gamma_poisson_pmf(lam, r), FORECAST_RANGE[1])
+    else:
+        p_any = 1 - math.exp(-lam)
+        low = _quantile(_poisson_pmf(lam), FORECAST_RANGE[0])
+        high = _quantile(_poisson_pmf(lam), FORECAST_RANGE[1])
+    return MonthForecast(month, lam, p_any, low, high, n, hits, overdispersed)
+
+
+def forecast_months(counts: Mapping[tuple[int, int], int], years: Sequence[int]) -> tuple[MonthForecast, ...]:
+    return tuple(month_forecast([counts.get((y, m), 0) for y in years], m) for m in range(1, 13))
+
+
+def forecast_check(
+    totals: Mapping[str, Mapping[tuple[int, int], int]], keys: Sequence[str], train: tuple[int, int], test: tuple[int, int]
+) -> ForecastCheck | None:
+    """Ajusta con los años de entrenamiento y compara con lo que pasó en los de prueba."""
+    train_years = list(range(train[0], train[1] + 1))
+    test_years = range(test[0], test[1] + 1)
+    pairs: list[tuple[float, int]] = []
+    inside = poisson_inside = 0
+    dispersion: list[float] = []
+    for key in keys:
+        values = totals.get(key, {})
+        for month in range(1, 13):
+            history = [values.get((y, month), 0) for y in train_years]
+            f = month_forecast(history, month)
+            if f.expected >= 0.5:
+                mean = f.expected
+                dispersion.append(sum((c - mean) ** 2 for c in history) / (len(history) - 1) / mean)
+            p_low = _quantile(_poisson_pmf(f.expected), FORECAST_RANGE[0]) if f.expected else 0
+            p_high = _quantile(_poisson_pmf(f.expected), FORECAST_RANGE[1]) if f.expected else 0
+            for y in test_years:
+                observed = values.get((y, month), 0)
+                pairs.append((f.p_any, int(observed > 0)))
+                inside += f.low <= observed <= f.high
+                poisson_inside += p_low <= observed <= p_high
+    if not pairs:
+        return None
+    base = sum(p for p, _ in pairs) / len(pairs)
+    brier = sum((p - o) ** 2 for p, o in pairs) / len(pairs)
+    reference = sum((base - o) ** 2 for _, o in pairs) / len(pairs)
+    return ForecastCheck(
+        train, test, len(pairs), brier, reference, inside / len(pairs), poisson_inside / len(pairs),
+        quantile(dispersion, 0.5) if dispersion else 1.0,
     )

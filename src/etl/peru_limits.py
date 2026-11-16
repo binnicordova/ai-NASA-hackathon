@@ -1,12 +1,13 @@
-"""Límites oficiales del Perú (INEI) para elegir el área: departamentos y distritos, y sus celdas H3.
+"""Límites oficiales del Perú (INEI) para elegir el área: departamentos, provincias y distritos, y sus celdas H3.
 
 Fuente: Geoservidor del INEI, servicio WFS de Interoperabilidad (capas ig_departamento, ig_provincia e
 ig_distrito). https://geoespacial.inei.gob.pe/geoserver/Interoperabilidad/ows
 
 Qué produce (data/processed/peru_limits.json):
   - departments: código, nombre y contorno simplificado de cada departamento.
+  - provinces: código (ccdd + ccpp, los 4 primeros dígitos del ubigeo), nombre, departamento y contorno simplificado.
   - districts: ubigeo, nombre, provincia, departamento y contorno simplificado.
-  - cells: para cada departamento y distrito, las celdas H3 de resolución 6 cuyo centro cae dentro del límite
+  - cells: para cada departamento, provincia y distrito, las celdas H3 de resolución 6 cuyo centro cae dentro del límite
     oficial. Es la misma grilla de la serie armonizada: así un área oficial se filtra sin mover ningún dato.
 
 Límites que la app debe declarar:
@@ -123,17 +124,25 @@ def cells_of(geometry: dict) -> list[str]:
 def main() -> None:
     print("[1/3] Descargando límites oficiales del INEI...")
     departments = fetch("ig_departamento")
-    provinces = {(f["properties"]["ccdd"], f["properties"]["ccpp"]): f["properties"]["nombprov"]
-                 for f in fetch("ig_provincia", "ccdd,ccpp,nombprov")}
+    province_features = fetch("ig_provincia")
+    provinces = {(f["properties"]["ccdd"], f["properties"]["ccpp"]): f["properties"]["nombprov"] for f in province_features}
     districts = fetch("ig_distrito")
     print(f"      {len(departments)} departamentos, {len(provinces)} provincias, {len(districts)} distritos")
 
     print("[2/3] Asignando celdas H3 y simplificando contornos...")
-    dept_out, cells = [], {"department": {}, "district": {}}
+    dept_out, cells = [], {"department": {}, "province": {}, "district": {}}
     for f in sorted(departments, key=lambda f: f["properties"]["ccdd"]):
         name = ACCENTED.get(plain(f["properties"]["nombdep"]), nice_name(f["properties"]["nombdep"]))
         dept_out.append({"code": f["properties"]["ccdd"], "name": name, "geometry": simplify(f["geometry"])})
         cells["department"][f["properties"]["ccdd"]] = cells_of(f["geometry"])
+    prov_out = []
+    for f in sorted(province_features, key=lambda f: (f["properties"]["ccdd"], f["properties"]["ccpp"])):
+        p = f["properties"]
+        if not f["geometry"]:
+            continue
+        code = p["ccdd"] + p["ccpp"]
+        prov_out.append({"code": code, "name": nice_name(p["nombprov"]), "department": p["ccdd"], "geometry": simplify(f["geometry"])})
+        cells["province"][code] = cells_of(f["geometry"])
     dist_out = []
     for f in sorted(districts, key=lambda f: f["properties"]["ubigeo"]):
         p = f["properties"]
@@ -150,7 +159,7 @@ def main() -> None:
         "source": "INEI, Geoservidor WFS Interoperabilidad: ig_departamento, ig_provincia, ig_distrito",
         "url": WFS, "retrieved": date.today().isoformat(), "h3_resolution": H3_RES,
         "rule": "Una celda H3 pertenece al límite que contiene su centro.",
-        "departments": dept_out, "districts": dist_out, "cells": cells,
+        "departments": dept_out, "provinces": prov_out, "districts": dist_out, "cells": cells,
     }
     OUT.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     print(f"      {OUT.stat().st_size / 1e6:.1f} MB")

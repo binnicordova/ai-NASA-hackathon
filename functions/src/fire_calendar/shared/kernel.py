@@ -145,12 +145,14 @@ def parse_polygon(text: str) -> tuple[tuple[float, float], ...]:
 
 @dataclass(frozen=True)
 class AreaOfInterest:
-    """Zona elegida por el usuario: el país, un departamento, un distrito (ubigeo), una caja o un polígono dibujado."""
+    """Zona elegida por el usuario: el país, un departamento, una provincia o un distrito (códigos INEI), una caja o un
+    polígono dibujado."""
 
-    kind: Literal["country", "department", "district", "bbox", "polygon"]
+    kind: Literal["country", "department", "province", "district", "bbox", "polygon"]
     department: str | None = None
     bbox: BoundingBox | None = None
     district: str | None = None
+    province: str | None = None
     polygon: tuple[tuple[float, float], ...] | None = None
 
     @classmethod
@@ -175,6 +177,13 @@ class AreaOfInterest:
         return cls("district", district=ubigeo)
 
     @classmethod
+    def of_province(cls, code: str) -> "AreaOfInterest":
+        code = code.strip()
+        if not (len(code) == 4 and code.isdigit()):
+            raise DomainError("Código de provincia inválido: se esperan 4 dígitos (los primeros del ubigeo)")
+        return cls("province", province=code)
+
+    @classmethod
     def of_polygon(cls, ring: tuple[tuple[float, float], ...]) -> "AreaOfInterest":
         return cls("polygon", polygon=ring)
 
@@ -187,6 +196,8 @@ class AreaOfInterest:
             return f"{b.south:.2f}, {b.west:.2f} → {b.north:.2f}, {b.east:.2f}"
         if self.kind == "district":
             return f"Distrito {self.district}"
+        if self.kind == "province":
+            return f"Provincia {self.province}"
         if self.kind == "polygon" and self.polygon:
             return f"Polígono de {len(self.polygon)} vértices"
         return "Perú"

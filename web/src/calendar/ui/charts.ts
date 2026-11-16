@@ -1,7 +1,7 @@
 import { compact, fmt, monthLabel, niceMax } from '../../shared/format';
 import { monthNames, t, type Key } from '../../shared/i18n';
 import { ACCENT, LEVEL_COLORS, NEUTRAL, NEUTRAL_LINE, VIIRS_ERA } from '../../shared/palette';
-import { metricNoun, metricValue, type BurnCalendar, type Metric, type YearTotal } from '../domain/types';
+import { metricNoun, metricValue, type BurnCalendar, type Counts, type Measure, type YearTotal } from '../domain/types';
 
 // Todas las gráficas comparten el mismo lienzo: 324 de ancho, eje Y a la izquierda.
 const X0 = 34;
@@ -56,7 +56,7 @@ export function renderFrequencyChart(
 export function renderYearsChart(
   svg: SVGElement,
   calendar: BurnCalendar,
-  metric: Metric,
+  metric: Measure,
   inspectedYear: number | null,
   onYear: (year: number) => void,
 ): string {
@@ -96,12 +96,26 @@ export function renderYearsChart(
   return t('years.r');
 }
 
+/** Épocas de la constelación: solo MODIS (Terra y Aqua), + S-NPP, + NOAA-20, + NOAA-21. */
+const CONSTELLATION_ERAS = [2003, 2012, 2018, 2023] as const;
+
 /** El año inspeccionado, mes a mes, sobre el rango habitual (percentiles 10 a 90) y la mediana. */
-export function renderYearDetail(svg: SVGElement, calendar: BurnCalendar, year: number): string {
+export function renderYearDetail(svg: SVGElement, calendar: BurnCalendar, year: number, measure: Measure = 'harmonized'): string {
   const top = 10;
   const bottom = 124;
-  const rows = calendar.series.filter((p) => p.year === year);
-  const medians = calendar.medians;
+  const v = (p: Counts): number => metricValue(p, measure);
+  const rows = calendar.series.filter((p) => p.year === year).map((r) => ({ ...r, harmonized: v(r) }));
+  // Con eventos, el año normal se calcula aquí y solo con los años de la misma constelación que el año elegido:
+  // los eventos crecen con cada satélite y comparar con otra época diría "por encima" solo por tener más satélites.
+  const era = [...CONSTELLATION_ERAS].reverse().find((start) => year >= start) ?? CONSTELLATION_ERAS[0];
+  const nextEra = CONSTELLATION_ERAS.find((start) => start > era);
+  const refFrom = measure === 'harmonized' ? calendar.referenceYears[0] : era;
+  const refTo = measure === 'harmonized' ? calendar.referenceYears[1] : Math.min(calendar.referenceYears[1], (nextEra ?? Infinity) - 1);
+  const medians = measure === 'harmonized' ? calendar.medians : Array.from({ length: 12 }, (_, i) => {
+    const values = calendar.series.filter((p) => p.month === i + 1 && p.year >= refFrom && p.year <= refTo).map(v).sort((a, b) => a - b);
+    const q = (f: number): number => values[Math.round(f * (values.length - 1))] ?? 0;
+    return { month: i + 1, median: q(0.5), p10: q(0.1), p90: q(0.9), years: values.length };
+  });
   const max = niceMax(Math.max(...medians.map((m) => m.p90), ...rows.map((r) => r.harmonized)));
   const px = (month: number): number => X0 + 10 + ((month - 1) * (X1 - X0 - 20)) / 11;
   const Y = (v: number): number => bottom - (v / max) * (bottom - top);
@@ -124,12 +138,12 @@ export function renderYearDetail(svg: SVGElement, calendar: BurnCalendar, year: 
   const above = rows.filter((r) => !(r.year === last.year && r.month === last.month) && r.harmonized > medians[r.month - 1]!.p90).map((r) => monthNames()[r.month - 1]);
   const completeYears = calendar.years.filter((y) => y.rank !== null).length;
   return (
-    t('detail.counts', { h: fmt(total.hotspots) }) +
-    (total.events !== null ? t('detail.events', { e: fmt(total.events) }) : '') +
+    (measure === 'events' && total.events !== null ? t('detail.eventsOnly', { e: fmt(total.events) }) : t('detail.counts', { h: fmt(total.hotspots) }) +
+      (total.events !== null ? t('detail.events', { e: fmt(total.events) }) : '')) +
     t('detail.peak', { year, month: monthNames()[peak.month - 1]! }) +
-    (total.partial ? t('detail.partial') : t('detail.rank', { r: total.rank ?? 0, n: completeYears })) +
+    (total.partial ? t('detail.partial') : measure === 'harmonized' ? t('detail.rank', { r: total.rank ?? 0, n: completeYears }) : '') +
     (above.length ? t('detail.above', { months: above.join(', ') }) : t('detail.noAbove')) +
-    (year < calendar.referenceYears[0] ? t('detail.lowConf') : '')
+    (measure !== 'harmonized' ? t('detail.eventsRef', { a: refFrom, b: refTo }) : year < calendar.referenceYears[0] ? t('detail.lowConf') : '')
   );
 }
 

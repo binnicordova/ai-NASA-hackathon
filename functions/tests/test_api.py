@@ -169,3 +169,35 @@ def test_raw_points_carry_the_daily_event_recount(client):
     cells = client.get("/api/v1/cells", params={k: v for k, v in params.items() if k != "limit"}).json()["features"]
     assert points["hexagons"] == len(cells)
     assert events["activeDays"] <= points["activeDays"] and events["largest"]["hotspots"] >= 21
+
+
+def test_province_is_an_official_area(client):
+    limits = client.get("/api/v1/limits").json()
+    assert len(limits["provinces"]) == 196
+    cusco = next(p for p in limits["provinces"] if p["code"] == "0801")
+    assert cusco["name"] == "Cusco" and cusco["department"] == "Cusco"
+    assert client.get("/api/v1/boundary", params={"province": "0801"}).json()["geometry"]["type"] == "MultiPolygon"
+    cal = client.get("/api/v1/calendar", params={"province": "0801"}).json()
+    assert cal["area"]["kind"] == "province" and cal["rangeSummary"]["hotspots"] > 0
+    assert client.get("/api/v1/calendar", params={"province": "9999"}).status_code == 400
+    assert client.get("/api/v1/calendar", params={"province": "0801", "department": "Cusco"}).status_code == 400
+
+
+def test_fire_forecast_is_poisson_and_checked_out_of_sample(client):
+    for level, count in (("department", 25), ("province", 196), ("district", 1890)):
+        fc = client.get("/api/v1/forecast", params={"level": level}).json()
+        assert fc["sensor"] == "MODIS" and fc["years"] == {"from": 2003, "to": 2025, "count": 23} and len(fc["units"]) == count
+        for u in fc["units"]:
+            assert all(0 <= lo <= hi for lo, hi in zip(u["low"], u["high"]))
+            assert all(0 <= p <= 1 for p in u["pAny"])
+        check = fc["check"]
+        # 2021-2025 fuera de muestra: mejor que una sola tasa, y el rango del 80 % cubre al menos el 80 % de los casos.
+        assert check["test"] == [2021, 2025] and check["skill"] > 0.25 and check["coverage"] >= 0.8
+    # Departamentos: los años varían más que un Poisson; el Poisson puro cubriría bastante menos que el 80 %.
+    dept = client.get("/api/v1/forecast", params={"level": "department"}).json()["check"]
+    assert dept["dispersion"] > 2 and dept["poissonCoverage"] < 0.7
+    cusco = client.get("/api/v1/forecast/area", params={"department": "Cusco"}).json()["months"][8]
+    assert cusco["expected"] > 50 and cusco["pAny"] > 0.99 and cusco["low"] <= cusco["expected"] <= cusco["high"]
+    assert client.get("/api/v1/forecast", params={"level": "x"}).status_code == 400
+    shapes = client.get("/api/v1/shapes", params={"level": "province"}).json()
+    assert len(shapes["features"]) == 196

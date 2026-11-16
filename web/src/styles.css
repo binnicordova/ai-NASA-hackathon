@@ -292,3 +292,63 @@ dialog::backdrop { background: rgba(7, 23, 63, .6); }
 .scope-bar { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; padding: 0 0 8px; margin-bottom: 8px; border-bottom: 1px solid var(--bd); font-size: 13px; }
 .scope-bar span { color: var(--tx2); }
 .exit-map-only[hidden], .view-btn[hidden] { display: none; }
+
+/* --- Alerta temprana: probabilidad histórica de fuego ------------------------------------------------ */
+/* En esta pestaña el panel muestra solo lo marcado con data-risk; la línea de tiempo no aplica (no hay rango). */
+.app.tab-risk .stats > :not([data-risk]) { display: none; }
+.app:not(.tab-risk) #riskCard, .app.tab-risk .not-risk { display: none; }
+.app.tab-risk .range { display: none; }
+@media (min-width: 1101px) { .app.tab-risk { --r-range: 0px; } .app.tab-risk .map-wrap { margin-bottom: -8px; } }
+.risk-card { border-left: 3px solid var(--fire-5); }
+.reset-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin: 2px 0 8px; }
+.reset-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.risk-month { margin: 8px 0 2px; } .risk-month strong { font-size: 15px; }
+/* La cifra que se destaca: eventos esperados, con la temporada como etiqueta y una frase que se lee sola. */
+.risk-hero { margin: 6px 0 4px; padding: 10px 12px; border-radius: var(--r); border-left: 4px solid var(--fire-2);
+  background: color-mix(in srgb, var(--fire-2) 14%, transparent); }
+.risk-hero[data-level="mid"] { border-left-color: var(--fire-4); background: color-mix(in srgb, var(--fire-4) 13%, transparent); }
+.risk-hero[data-level="high"] { border-left-color: var(--fire-6); background: color-mix(in srgb, var(--fire-6) 13%, transparent); }
+.risk-hero[data-level="none"] { border-left-color: var(--bd2); background: var(--s1); }
+.risk-level-badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px;
+  border-radius: 9px; background: var(--fire-2); color: var(--deep-blue); }
+.risk-hero[data-level="mid"] .risk-level-badge { background: var(--fire-4); color: var(--deep-blue); }
+.risk-hero[data-level="high"] .risk-level-badge { background: var(--fire-6); color: var(--white); }
+.risk-hero[data-level="none"] .risk-level-badge { background: var(--bd2); color: var(--tx); }
+.risk-big { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 2px; }
+.risk-big b { font-size: 42px; line-height: 1; font-variant-numeric: tabular-nums; color: var(--fire-6); }
+.risk-hero[data-level="none"] .risk-big b { color: var(--tx2); }
+.risk-big span { font-weight: 700; color: var(--tx2); }
+.risk-summary { margin: 4px 0 0; font-size: 13px; line-height: 1.4; }
+.risk-last { margin: 6px 0 0; padding-top: 6px; border-top: 1px dashed var(--bd2); color: var(--tx2); }
+.risk-last[data-where="above"] { color: var(--fire-6); font-weight: 700; }
+.risk-last[hidden] { display: none; }
+.risk-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; height: 74px; margin: 10px 0 8px; }
+.risk-month-bar { position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 0 16px; border: 1px solid transparent;
+  border-radius: 4px; background: var(--s1); cursor: pointer; min-height: 0; }
+.risk-month-bar[aria-pressed="true"] { border-color: var(--tx); }
+.risk-month-fill { display: block; width: 100%; border-radius: 2px 2px 0 0; background: var(--fire-2); }
+.risk-month-bar[data-level="mid"] .risk-month-fill { background: var(--fire-4); }
+.risk-month-bar[data-level="high"] .risk-month-fill { background: var(--fire-6); }
+.risk-month-name { position: absolute; bottom: 1px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--tx3); }
+.risk-top { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; }
+.risk-top li { display: flex; align-items: baseline; gap: 4px; } .risk-top li > span:not(.risk-any) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.risk-pill { font-size: 11px; padding: 1px 6px; border-radius: 9px; font-variant-numeric: tabular-nums; outline: 1px solid var(--bd2); }
+#riskTopBlock[hidden], #legendRisk[hidden] { display: none; }
+#riskTopBlock h4 { margin: 8px 0 2px; font-size: 13px; }
+.risk-scale { flex-direction: column; align-items: flex-start; gap: 3px; color: var(--tx2); }
+.risk-legend-item { gap: 6px; }
+.risk-swatches { gap: 1px; padding: 2px; border-radius: 3px; background: var(--map-ground); }
+.risk-swatch { width: 16px; height: 12px; opacity: .78; }
+
+/* Focos crudos: la cifra principal son los eventos (focos disueltos por día). */
+.app.tab-raw .not-raw { display: none; }
+.kpi.hl { background: color-mix(in srgb, var(--map-point) 14%, var(--s1)); outline: 1px solid color-mix(in srgb, var(--map-point) 45%, transparent); }
+.kpi.hl b { color: var(--map-point); }
+.ranking .hl { font-weight: 700; color: var(--map-point); background: color-mix(in srgb, var(--map-point) 9%, transparent); }
+.ranking th.hl .sort { color: var(--map-point); font-weight: 700; }
+.risk-any { font-variant-numeric: tabular-nums; }
+.risk-badges { gap: 6px; flex-wrap: wrap; }
+.risk-impact-badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 9px; }
+.risk-impact-badge[hidden] { display: none; }
+.risk-intro { margin: 2px 0 4px; } .risk-also { margin: 0 0 4px; text-align: center; } .risk-also[hidden] { display: none; }
+.risk-year-title { margin: 12px 0 0; font-size: 13px; }

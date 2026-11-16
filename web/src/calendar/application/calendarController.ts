@@ -3,7 +3,7 @@ import { t } from '../../shared/i18n';
 
 /** Cómo se dibujan los buffers de los focos crudos. */
 export type BufferMode = 'overlap' | 'dissolve';
-import type { Anomaly, BurnCalendar, CellCollection, DailySeries, DayRange, Limits, Meta, Metric, PointSample, RankingRow } from '../domain/types';
+import type { Anomaly, AreaForecast, BurnCalendar, CellCollection, DailySeries, DayRange, Limits, Meta, Metric, PointSample, RankingRow, Forecast, RiskLevel } from '../domain/types';
 import { ApiError, calendarApi } from '../infrastructure/calendarApiClient';
 
 /** Lo que el usuario ha elegido. Es lo único que se guarda en la URL. */
@@ -19,6 +19,10 @@ export interface Selection {
   /** Buffers de los focos: disueltos por día en una figura (por defecto) o superpuestos uno a uno. */
   buffers: BufferMode;
   inspectedYear: number | null;
+  /** Pestaña de alerta temprana: probabilidad histórica de fuego por límite oficial. */
+  risk: boolean;
+  /** Mes del calendario que se mira en la alerta temprana. `null` = el mes siguiente a los últimos datos. */
+  riskMonth: number | null;
 }
 
 /** Lo que functions/ ha respondido para esa selección. */
@@ -35,6 +39,11 @@ export interface ViewData {
   anomaly: Anomaly | null;
   cells: CellCollection | null;
   points: PointSample | null;
+  /** Predicción de fuego del área elegida, por mes. */
+  areaForecast: AreaForecast | null;
+  /** Predicción de cada límite oficial del nivel que muestra el mapa, y sus contornos. */
+  forecast: Forecast | null;
+  shapes: GeoJSON.FeatureCollection | null;
   loading: boolean;
   mapLoading: boolean;
   error: string | null;
@@ -54,9 +63,10 @@ const NO_CHANGE: Changes = { area: false, map: false };
  * No calcula nada del dominio: medianas, anomalías y niveles llegan ya resueltos.
  */
 export class CalendarController {
-  readonly selection: Selection = { area: COUNTRY, from: null, to: null, metric: 'harmonized', overlay: false, buffers: 'dissolve', inspectedYear: null };
+  readonly selection: Selection = { area: COUNTRY, from: null, to: null, metric: 'harmonized', overlay: false, buffers: 'dissolve', inspectedYear: null, risk: false, riskMonth: null };
   readonly data: ViewData = {
-    meta: null, limits: null, boundary: null, calendar: null, daily: null, ranking: [], anomaly: null, cells: null, points: null, loading: false, mapLoading: false, error: null,
+    meta: null, limits: null, boundary: null, calendar: null, daily: null, ranking: [], anomaly: null, cells: null, points: null,
+    areaForecast: null, forecast: null, shapes: null, loading: false, mapLoading: false, error: null,
   };
   private listeners: Listener[] = [];
   private areaRequest: AbortController | null = null;
@@ -98,7 +108,7 @@ export class CalendarController {
 
   /** Aplica una selección completa, por ejemplo al abrir un enlace compartido. */
   restore(selection: Partial<Selection>): Promise<void> {
-    Object.assign(this.selection, { area: COUNTRY, from: null, to: null, metric: 'harmonized', overlay: false, buffers: 'dissolve', inspectedYear: null }, selection);
+    Object.assign(this.selection, { area: COUNTRY, from: null, to: null, metric: 'harmonized', overlay: false, buffers: 'dissolve', inspectedYear: null, risk: false, riskMonth: null }, selection);
     this.completeDistrict();
     return this.loadArea();
   }
@@ -109,12 +119,17 @@ export class CalendarController {
     return this.loadArea();
   }
 
-  /** Un distrito que llega solo con su ubigeo (por ejemplo, desde un enlace) toma su nombre y departamento oficiales. */
+  /** Un distrito o provincia que llega solo con su código (por ejemplo, desde un enlace) toma su nombre y departamento oficiales. */
   private completeDistrict(): void {
     const area = this.selection.area;
-    if (area.kind !== 'district' || area.name) return;
-    const found = this.data.limits?.districts.find((d) => d.ubigeo === area.ubigeo);
-    if (found) this.selection.area = { ...area, name: found.name, department: found.department };
+    if (area.kind === 'district' && (!area.name || !area.province)) {
+      const found = this.data.limits?.districts.find((d) => d.ubigeo === area.ubigeo);
+      if (found) this.selection.area = { ...area, name: found.name, department: found.department, province: found.province };
+    }
+    if (area.kind === 'province' && !area.name) {
+      const found = this.data.limits?.provinces.find((p) => p.code === area.code);
+      if (found) this.selection.area = { ...area, name: found.name, department: found.department };
+    }
   }
 
   setRange(from: string | null, to: string | null): Promise<void> {
@@ -126,8 +141,72 @@ export class CalendarController {
 
   setMetric(metric: Metric): Promise<void> {
     this.selection.metric = metric;
+    this.selection.risk = false;
     this.emit();
     return this.loadMap();
+  }
+
+  /** Pestaña de alerta temprana: el mapa pasa a los límites oficiales coloreados por su probabilidad. */
+  setRisk(): Promise<void> {
+    this.selection.risk = true;
+    this.emit({ area: false, map: true });
+    return this.loadRisk();
+  }
+
+  /**
+   * El mapa de alerta temprana baja un nivel desde el área elegida (el mismo filtro global):
+   * Perú → departamentos, departamento → sus provincias, provincia → sus distritos. Un distrito o un área dibujada
+   * se ven entre los distritos.
+   */
+  riskLevel(): RiskLevel {
+    const kind = this.selection.area.kind;
+    return kind === 'country' ? 'department' : kind === 'department' ? 'province' : 'district';
+  }
+
+  /** Vuelve a la vista inicial: todo el Perú, todo el rango, sin capas extra. Se queda en la pestaña actual. */
+  reset(): Promise<void> {
+    Object.assign(this.selection, { area: COUNTRY, from: null, to: null, overlay: false, buffers: 'dissolve', riskMonth: null });
+    this.selection.inspectedYear = null;
+    return this.loadArea();
+  }
+
+  setRiskMonth(month: number): void {
+    this.selection.riskMonth = month;
+    this.emit({ area: false, map: true });
+  }
+
+  /** El mes que mira la alerta temprana: el elegido o, si no, el siguiente al último dato. */
+  riskMonth(): number {
+    if (this.selection.riskMonth) return this.selection.riskMonth;
+    const last = this.data.meta?.lastDate;
+    return last ? (Number(last.slice(5, 7)) % 12) + 1 : 1;
+  }
+
+  /** Probabilidades y contornos de un nivel, una vez por nivel: no dependen del área ni del rango. */
+  private riskCache = new Map<RiskLevel, [Forecast, GeoJSON.FeatureCollection]>();
+  private riskRequest: AbortController | null = null;
+
+  private async loadRisk(): Promise<void> {
+    const level = this.riskLevel();
+    const cached = this.riskCache.get(level);
+    if (cached) {
+      [this.data.forecast, this.data.shapes] = cached;
+      this.emit({ area: false, map: true });
+      return;
+    }
+    this.riskRequest?.abort();
+    const request = (this.riskRequest = new AbortController());
+    this.data.mapLoading = true;
+    this.emit();
+    try {
+      const pair = await Promise.all([calendarApi.forecast(level, request.signal), calendarApi.shapes(level, request.signal)]);
+      this.riskCache.set(level, pair);
+      if (this.riskLevel() === level) [this.data.forecast, this.data.shapes] = pair;
+      this.data.mapLoading = false;
+      this.emit({ area: false, map: true });
+    } catch (error) {
+      this.fail(error);
+    }
   }
 
   /** Solo cambia cómo se dibujan los focos ya cargados: no pide nada a functions/. */
@@ -160,19 +239,21 @@ export class CalendarController {
     this.data.error = null;
     this.emit();
     try {
-      const [calendar, daily, anomaly, ranking, boundary] = await Promise.all([
+      const [calendar, daily, anomaly, ranking, boundary, areaForecast] = await Promise.all([
         calendarApi.calendar(area, range, request.signal),
         calendarApi.daily(area, request.signal),
         calendarApi.anomaly(area, request.signal),
         calendarApi.ranking(range, request.signal),
         // Sin contorno el área sigue funcionando: solo no se dibuja su límite oficial.
         calendarApi.boundary(area, request.signal).catch(() => null),
+        calendarApi.areaForecast(area, request.signal).catch(() => null),
       ]);
-      Object.assign(this.data, { calendar, daily, anomaly, ranking, boundary, loading: false });
+      Object.assign(this.data, { calendar, daily, anomaly, ranking, boundary, areaForecast, loading: false });
       this.selection.from = range.from;
       this.selection.to = range.to;
       this.selection.inspectedYear ??= calendar.years.at(-1)?.year ?? null;
       this.emit({ area: true, map: false });
+      if (this.selection.risk) await this.loadRisk();
       await this.loadMap(true);
     } catch (error) {
       this.fail(error);
@@ -203,6 +284,11 @@ export class CalendarController {
 
   /** Pide solo las capas que la pestaña muestra: hexágonos, focos o ambos. */
   private async loadMap(areaChanged = false): Promise<void> {
+    if (this.selection.risk) {
+      // En la alerta temprana el mapa son los límites oficiales: no se piden hexágonos ni focos.
+      this.emit({ area: areaChanged, map: true });
+      return;
+    }
     const { area, metric, overlay } = this.selection;
     const range = this.range();
     const key = JSON.stringify([area, range]);

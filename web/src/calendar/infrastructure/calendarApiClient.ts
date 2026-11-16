@@ -1,6 +1,6 @@
 import { areaQuery, type AreaOfInterest } from '../../area-of-interest/domain/area';
 import { t } from '../../shared/i18n';
-import type { Anomaly, BurnCalendar, CellCollection, DailySeries, DayRange, Limits, Meta, PointSample, RankingRow } from '../domain/types';
+import type { Anomaly, AreaForecast, BurnCalendar, CellCollection, DailySeries, DayRange, Limits, Meta, PointSample, RankingRow, Forecast, RiskLevel } from '../domain/types';
 
 /** Base de functions/. Vacío = mismo origen (proxy de Vite en desarrollo, mismo servidor en producción). */
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
@@ -41,9 +41,9 @@ export const calendarApi = {
 
   limits: (signal?: AbortSignal) => getJson<Limits>('limits', {}, signal),
 
-  /** Contorno oficial del departamento o distrito; `null` para el resto de áreas. */
+  /** Contorno oficial del departamento, la provincia o el distrito; `null` para el resto de áreas. */
   boundary: (area: AreaOfInterest, signal?: AbortSignal): Promise<GeoJSON.Feature | null> =>
-    area.kind === 'department' || area.kind === 'district' ? getJson<GeoJSON.Feature>('boundary', areaQuery(area), signal) : Promise.resolve(null),
+    area.kind === 'department' || area.kind === 'province' || area.kind === 'district' ? getJson<GeoJSON.Feature>('boundary', areaQuery(area), signal) : Promise.resolve(null),
 
   daily: (area: AreaOfInterest, signal?: AbortSignal) => getJson<DailySeries>('daily', { ...areaQuery(area) }, signal),
 
@@ -55,6 +55,14 @@ export const calendarApi = {
 
   points: (area: AreaOfInterest, range: DayRange, signal?: AbortSignal) =>
     getJson<PointSample>('points', { ...areaQuery(area), ...range, limit: String(POINT_LIMIT) }, signal),
+
+  /** Predicción de fuego por mes de cada límite oficial del nivel (Poisson sobre eventos MODIS). */
+  forecast: (level: RiskLevel, signal?: AbortSignal) => getJson<Forecast>('forecast', { level }, signal),
+
+  areaForecast: (area: AreaOfInterest, signal?: AbortSignal) => getJson<AreaForecast>('forecast/area', { ...areaQuery(area) }, signal),
+
+  /** Contornos oficiales de todos los límites de un nivel (para el mapa de alerta temprana). */
+  shapes: (level: RiskLevel, signal?: AbortSignal) => getJson<GeoJSON.FeatureCollection>('shapes', { level }, signal),
 
   ranking: (range: DayRange, signal?: AbortSignal) => getJson<RankingRow[]>('ranking', { ...range }, signal),
 
