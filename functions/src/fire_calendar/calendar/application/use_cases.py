@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fire_calendar.shared.kernel import AreaOfInterest, DateRange, DomainError, YearMonth
+from fire_calendar.shared.kernel import AreaOfInterest, DateRange, DayRange, DomainError, YearMonth
 
 from ..domain import services
 from ..domain.model import (
@@ -16,7 +16,7 @@ from ..domain.model import (
     RangeSummary,
     YearlyTotal,
 )
-from ..domain.ports import ActiveCell, DepartmentTotal, HarmonizedSeriesGateway
+from ..domain.ports import ActiveCell, DailyActivity, DepartmentTotal, HarmonizedSeriesGateway, HotspotSample
 
 
 @dataclass(frozen=True)
@@ -76,13 +76,35 @@ class GetActiveCells:
     def __init__(self, gateway: HarmonizedSeriesGateway) -> None:
         self._gateway = gateway
 
-    def __call__(self, area: AreaOfInterest, period: YearMonth) -> list[ActiveCell]:
-        return self._gateway.active_cells(area, period)
+    def __call__(self, area: AreaOfInterest, days: DayRange) -> list[ActiveCell]:
+        return self._gateway.active_cells(area, days)
+
+
+class GetDailyActivity:
+    def __init__(self, gateway: HarmonizedSeriesGateway) -> None:
+        self._gateway = gateway
+
+    def __call__(self, area: AreaOfInterest) -> DailyActivity:
+        return self._gateway.daily_activity(area)
+
+
+class GetHotspotPoints:
+    """Focos sin armonizar, uno por detección, para la vista cruda del mapa. Con tope para no saturar al cliente."""
+
+    MAX_LIMIT = 50_000
+
+    def __init__(self, gateway: HarmonizedSeriesGateway) -> None:
+        self._gateway = gateway
+
+    def __call__(self, area: AreaOfInterest, days: DayRange, limit: int) -> HotspotSample:
+        if not 1 <= limit <= self.MAX_LIMIT:
+            raise DomainError(f"El límite debe estar entre 1 y {self.MAX_LIMIT}")
+        return self._gateway.hotspot_points(area, days, limit)
 
 
 class GetDepartmentRanking:
     def __init__(self, gateway: HarmonizedSeriesGateway) -> None:
         self._gateway = gateway
 
-    def __call__(self, date_range: DateRange) -> list[DepartmentTotal]:
-        return sorted(self._gateway.department_totals(date_range), key=lambda d: -d.harmonized)
+    def __call__(self, days: DayRange) -> list[DepartmentTotal]:
+        return sorted(self._gateway.department_totals(days), key=lambda d: -d.harmonized)

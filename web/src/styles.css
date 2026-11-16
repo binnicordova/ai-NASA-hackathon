@@ -27,13 +27,18 @@
   --acc: var(--electric-blue); --accbg: var(--neon-blue); --on-acc: var(--white); --focus: var(--neon-blue);
   --warnbg: #f7ffc6; --warn: var(--deep-blue); --warn-edge: var(--fire-4); --errbg: #ffeae4; --err: var(--martian-red);
   --c-viirs: var(--rocket-red); --c-modis: var(--martian-red);
+  --map-hex: var(--fire-3); --map-point: #ff2a12; --map-ground: #2a3b2a;
   --c-neutral: #848fa6; --c-neutral-line: var(--tx2);
   --basemap-filter: none;
   --r: 8px;
   color-scheme: light dark;
 }
+/*
+ * Tema oscuro: el del sistema, salvo que la persona elija uno con el interruptor del encabezado
+ * (`data-theme` en <html>, guardado en su navegador). Las mismas declaraciones para los dos caminos.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: var(--deep-blue); --s1: #07265f; --s2: #082054; --tx: var(--white); --tx2: #c9e3ff; --tx3: #95b0dd;
     --bd: rgba(46, 150, 245, .24); --bd2: rgba(46, 150, 245, .7); --cell-outline: rgba(255, 255, 255, .32);
     --acc: var(--blue-yonder); --focus: var(--neon-yellow);
@@ -43,6 +48,17 @@
     --basemap-filter: brightness(.6) contrast(1.1) saturate(.6);
   }
 }
+:root[data-theme="dark"] {
+    --bg: var(--deep-blue); --s1: #07265f; --s2: #082054; --tx: var(--white); --tx2: #c9e3ff; --tx3: #95b0dd;
+    --bd: rgba(46, 150, 245, .24); --bd2: rgba(46, 150, 245, .7); --cell-outline: rgba(255, 255, 255, .32);
+    --acc: var(--blue-yonder); --focus: var(--neon-yellow);
+    --warnbg: #1c3b5b; --warn: var(--white); --warn-edge: var(--neon-yellow); --errbg: var(--martian-red); --err: var(--white);
+    --c-viirs: var(--neon-yellow); --c-modis: var(--fire-3);
+    /* El mapa de calles es claro: se atenúa para que las celdas brillantes sigan destacando. */
+    --basemap-filter: brightness(.6) contrast(1.1) saturate(.6);
+  }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 /* El punto medio de Overpass queda pegado al texto que le sigue: ese solo carácter sale de una fuente del sistema. */
 @font-face { font-family: MidDot; src: local("Helvetica Neue"), local("Segoe UI"), local("Roboto"), local("Arial"); unicode-range: U+00B7; }
 * { box-sizing: border-box; }
@@ -155,7 +171,7 @@ input, select { height: 32px; width: 100%; min-width: 0; border: 1px solid var(-
 /* Selector de rango tipo brush: la actividad mensual de fondo y una ventana que acerca el periodo. */
 .range-head { gap: 8px; }
 .brush { margin-top: 6px; --brush-fill: color-mix(in srgb, var(--acc) 55%, transparent); }
-.brush-track { position: relative; height: 52px; border-radius: var(--r); background: var(--s1); cursor: crosshair; touch-action: none; user-select: none; }
+.brush-track { position: relative; overflow: hidden; height: 52px; border-radius: var(--r); background: var(--s1); cursor: crosshair; touch-action: none; user-select: none; }
 .brush-chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .brush-chart path { fill: var(--brush-fill); }
 .brush-dim { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--s2) 62%, transparent); pointer-events: none; }
@@ -164,11 +180,10 @@ input, select { height: 32px; width: 100%; min-width: 0; border: 1px solid var(-
 .brush-handle { position: absolute; top: 50%; width: 12px; height: 30px; margin-top: -15px; border-radius: 4px; background: var(--acc); cursor: ew-resize; touch-action: none; }
 .brush-handle:first-child { left: -7px; } .brush-handle:last-child { right: -7px; }
 .brush-handle::after { content: ""; position: absolute; inset: 9px 4px; border-left: 1px solid var(--on-acc); border-right: 1px solid var(--on-acc); opacity: .8; }
-.brush-cursor { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--rocket-red); pointer-events: none; }
 .brush-era { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--c-neutral-line); padding: 2px 0 0 4px; font-size: 10px; color: var(--tx2); white-space: nowrap; pointer-events: none; }
 .brush-tip { position: absolute; top: 4px; transform: translateX(-50%); background: var(--tx); color: var(--bg); font-size: 11px; padding: 1px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; z-index: 1; }
 .brush-axis { position: relative; height: 16px; font-size: 11px; color: var(--tx3); font-variant-numeric: tabular-nums; }
-.brush-axis span { position: absolute; top: 1px; transform: translateX(-50%); }
+.brush-axis { overflow: hidden; } .brush-axis span { position: absolute; top: 1px; transform: translateX(-50%); white-space: nowrap; }
 
 dialog { border: 1px solid var(--bd); border-radius: 12px; background: var(--s2); color: var(--tx); padding: 14px 16px; width: min(960px, 96vw); max-height: 92vh; }
 dialog::backdrop { background: rgba(7, 23, 63, .6); }
@@ -192,3 +207,88 @@ dialog::backdrop { background: rgba(7, 23, 63, .6); }
   input, select, .btn, .seg button, .btn.mini { min-height: 44px; } .brush-track { height: 60px; } .brush-handle { width: 18px; height: 40px; margin-top: -20px; } .cal > * { height: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+
+/* Línea de tiempo: inicio y fin sobre las asas, zoom y vista actual. */
+.brush-tools { gap: 8px; margin-top: 4px; }
+.brush-flags { position: relative; height: 18px; overflow: hidden; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.brush-flag { position: absolute; top: 1px; white-space: nowrap; color: var(--acc); }
+.brush-flag.start:not(.both)::before { content: "▸ "; } .brush-flag.end::after { content: " ◂"; }
+
+/* Mapa: hexágonos translúcidos de un solo color y focos crudos como cuadrados rojos. */
+.squares-layer { pointer-events: none; }
+.map-tools { position: absolute; z-index: 500; left: 54px; top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.map-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 10px; cursor: pointer; white-space: nowrap; }
+.map-toggle input { width: 16px; height: 16px; min-height: 0; margin: 0; accent-color: var(--map-point); }
+.map-toggle[hidden] { display: none; }
+.map-legend p { margin: 0 0 3px; gap: 6px; } .map-legend p[hidden] { display: none; }
+.hex-scale { gap: 6px; font-variant-numeric: tabular-nums; color: var(--tx2); } .map-legend #legendHex[hidden] { display: none; }
+.hex-steps { gap: 1px; padding: 2px; border-radius: 3px; background: var(--map-ground); /* fondo oscuro como el satélite: la transparencia se ve igual que en el mapa */ }
+.hex-step { width: 16px; height: 14px; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.point-key { position: relative; width: 14px; height: 14px; border-radius: 50%; background: color-mix(in srgb, var(--map-point) 30%, transparent); flex: none; }
+.point-key::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: var(--map-point); }
+.date-field { display: grid; gap: 2px; font-size: 12px; color: var(--tx2); }
+
+/* Herramientas de dibujo del área: tres botones con icono. */
+.draw-tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.draw-tools .btn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; font-size: 12px; }
+.draw-tools .btn[aria-pressed="true"] { background: var(--accbg); color: var(--on-acc); border-color: var(--acc); }
+.draw-icon { width: 24px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-dasharray: 3 2; stroke-linejoin: round; }
+.draw-icon circle { fill: currentColor; stroke: none; }
+#district:disabled { opacity: .55; }
+
+/* Tarjeta de focos crudos: totales y reparto por sensor, satélite, día/noche y confianza. */
+.raw-card { border-left: 3px solid var(--map-point); }
+.raw-bars { display: grid; gap: 8px; margin: 10px 0 6px; }
+.raw-bar h4 { margin: 0 0 3px; font-size: 12px; font-weight: 700; color: var(--tx2); }
+.raw-track { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--s1); }
+.raw-track span { display: block; height: 100%; }
+.raw-legend { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 3px; font-size: 11px; color: var(--tx2); font-variant-numeric: tabular-nums; }
+.raw-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.inei-limits { filter: drop-shadow(0 0 1px rgba(255, 255, 255, .6)); }
+#rawBusiest { font-size: 15px; line-height: 1.25; }
+.raw-events { border-top: 1px solid var(--bd); margin-top: 10px; padding-top: 10px; }
+.raw-events h4 { margin: 0 0 4px; font-size: 13px; }
+#evBusiest { font-size: 15px; line-height: 1.25; }
+#evChart { width: 100%; height: auto; margin-top: 8px; }
+#evChart rect.bar { fill: var(--map-point); }
+#evChart text { font-size: 9px; fill: var(--tx3); }
+.buffer-toggle .seg button { min-height: 26px; padding: 3px 9px; font-size: 12px; }
+.popup-rule { border: 0; border-top: 1px solid var(--bd); margin: 6px 0; }
+
+/* Vista: ocultar encabezado, paneles y línea de tiempo, o dejar solo el mapa. */
+.app.hide-filters .filters, .app.hide-stats .stats, .app.hide-range .range { display: none; }
+@media (min-width: 1024px) {
+  .app { --c-filters: 250px; --c-stats: 360px; --r-range: auto;
+    grid-template-columns: var(--c-filters) minmax(0, 1fr) var(--c-stats); grid-template-rows: auto minmax(0, 1fr) var(--r-range); }
+  .app > .top { grid-row: 1; } .app > .filters { grid-column: 1; grid-row: 2; } .app > .map-wrap { grid-column: 2; grid-row: 2; }
+  .app > .stats { grid-column: 3; grid-row: 2; } .app > .range { grid-row: 3; }
+  /* Una sección oculta deja su pista en 0 px; el mapa recupera el hueco de esa pista con un margen negativo. */
+  .app.hide-filters { --c-filters: 0px; } .app.hide-filters .map-wrap { margin-left: -8px; }
+  .app.hide-stats { --c-stats: 0px; } .app.hide-stats .map-wrap { margin-right: -8px; }
+  .app.hide-range { --r-range: 0px; } .app.hide-range .map-wrap { margin-bottom: -8px; }
+}
+/* Solo mapa: bajo el encabezado, el mapa ocupa todo lo demás. */
+.app.hide-filters.hide-stats.hide-range .map-wrap { min-height: 0; }
+.view-tools { position: absolute; z-index: 600; right: 10px; top: 58px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.view-btn { width: 34px; height: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; background: var(--s2); }
+.view-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.view-btn[aria-pressed="true"], .view-btn[aria-expanded="true"] { background: var(--accbg); color: var(--on-acc); border-color: var(--acc); }
+.view-menu { display: grid; gap: 6px; padding: 10px 12px; font-size: 13px; min-width: 190px; }
+.view-menu[hidden] { display: none; }
+.view-menu p { margin: 0 0 2px; }
+.view-menu label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.view-menu input { width: 16px; height: 16px; min-height: 0; margin: 0; }
+.exit-map-only { position: absolute; z-index: 600; left: 50%; bottom: 26px; transform: translateX(-50%); }
+.ranking th button.sort { all: unset; cursor: pointer; font: inherit; color: inherit; }
+.ranking th button.sort::after { content: " ↕"; opacity: .4; }
+.ranking th[aria-sort="descending"] button.sort::after { content: " ↓"; opacity: 1; }
+.ranking th button.sort:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Interruptor de tema: sol en el tema oscuro (pasar a claro), luna en el claro (pasar a oscuro). */
+.theme-btn { width: 36px; padding: 0; display: grid; place-items: center; }
+.theme-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-btn .moon { fill: currentColor; stroke: none; }
+.theme-btn[data-current="dark"] .moon, .theme-btn[data-current="light"] .sun { display: none; }
+.scope-bar { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; padding: 0 0 8px; margin-bottom: 8px; border-bottom: 1px solid var(--bd); font-size: 13px; }
+.scope-bar span { color: var(--tx2); }
+.exit-map-only[hidden], .view-btn[hidden] { display: none; }

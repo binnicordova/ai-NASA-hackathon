@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fire_calendar.calendar.application.use_cases import BurnCalendar
 from fire_calendar.calendar.domain.model import Anomaly
-from fire_calendar.calendar.domain.ports import ActiveCell, DepartmentTotal
+from fire_calendar.calendar.domain.ports import ActiveCell, DailyActivity, DepartmentTotal, HotspotSample
 from fire_calendar.shared.kernel import AreaOfInterest
 
 LEVEL_NAMES = ("low", "moderate", "high", "very_high")
@@ -121,6 +121,46 @@ def cells_geojson(cells: list[ActiveCell]) -> dict:
 
 def ranking_json(rows: list[DepartmentTotal]) -> list[dict]:
     return [
-        {"department": r.department, "harmonized": round(r.harmonized, 1), "hotspots": r.hotspots, "events": r.events}
+        {"department": r.department, "hexagons": r.hexagons, "hotspots": r.hotspots, "events": r.events,
+         "harmonized": round(r.harmonized, 1)}
         for r in rows
     ]
+
+
+def daily_json(daily: DailyActivity) -> dict:
+    """Series diarias densas: el día i es `start` + i. Compacto a propósito (unos 9 500 días)."""
+    return {
+        "start": daily.start, "harmonized": list(daily.harmonized), "hotspots": list(daily.hotspots),
+        "events": None if daily.events is None else list(daily.events),
+    }
+
+
+POINT_FIELDS = ("lon", "lat", "instrument", "satellite", "date", "time", "confidence", "frp", "daynight")
+
+
+def points_json(sample: HotspotSample) -> dict:
+    """Focos crudos como filas compactas; `fields` nombra cada posición."""
+    s = sample.summary
+    e = sample.events
+    return {
+        "events": None if e is None else {
+            "total": e.total, "hotspots": e.hotspots, "activeDays": e.active_days,
+            "busiestDay": e.busiest_day, "busiestCount": e.busiest_count, "sizes": e.sizes,
+            "largest": None if e.largest_day is None else {
+                "day": e.largest_day, "hotspots": e.largest_hotspots, "frp": e.largest_frp,
+                "lat": e.largest_lat, "lon": e.largest_lon,
+            },
+        },
+        "summary": None if s is None else {
+            "total": s.total, "activeDays": s.active_days, "hexagons": s.hexagons, "bySensor": s.by_sensor, "bySatellite": s.by_satellite,
+            "byDaynight": s.by_daynight, "byConfidence": s.by_confidence, "frpMedian": s.frp_median, "frpMax": s.frp_max,
+            "busiestDay": s.busiest_day, "busiestCount": s.busiest_count,
+        },
+        "total": sample.total, "shown": len(sample.points), "truncated": sample.truncated,
+        "fields": list(POINT_FIELDS),
+        "points": [
+            [p.longitude, p.latitude, p.instrument, p.satellite, p.acq_date, p.acq_time, p.confidence,
+             None if p.frp is None else round(p.frp, 1), p.daynight]
+            for p in sample.points
+        ],
+    }

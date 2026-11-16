@@ -1,6 +1,6 @@
 import { areaQuery, type AreaOfInterest } from '../../area-of-interest/domain/area';
 import { t } from '../../shared/i18n';
-import type { Anomaly, BurnCalendar, CellCollection, Meta, RankingRow } from '../domain/types';
+import type { Anomaly, BurnCalendar, CellCollection, DailySeries, DayRange, Limits, Meta, PointSample, RankingRow } from '../domain/types';
 
 /** Base de functions/. Vacío = mismo origen (proxy de Vite en desarrollo, mismo servidor en producción). */
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
@@ -29,26 +29,36 @@ async function getJson<T>(path: string, params: Record<string, string | null | u
   return (await response.json()) as T;
 }
 
-export interface Period {
-  from: string | null;
-  to: string | null;
-}
+/** Límite de focos crudos por petición: más que eso satura el navegador sin aportar a la lectura. */
+export const POINT_LIMIT = 30_000;
 
 export const calendarApi = {
   meta: (signal?: AbortSignal) => getJson<Meta>('meta', {}, signal),
 
-  calendar: (area: AreaOfInterest, period: Period, signal?: AbortSignal) =>
-    getJson<BurnCalendar>('calendar', { ...areaQuery(area), ...period }, signal),
+  /** El calendario es mensual: el rango de días se lleva a los meses que toca. */
+  calendar: (area: AreaOfInterest, range: DayRange, signal?: AbortSignal) =>
+    getJson<BurnCalendar>('calendar', { ...areaQuery(area), from: range.from.slice(0, 7), to: range.to.slice(0, 7) }, signal),
 
-  anomaly: (area: AreaOfInterest, month: string, signal?: AbortSignal) =>
-    getJson<Anomaly>('anomaly', { ...areaQuery(area), month }, signal),
+  limits: (signal?: AbortSignal) => getJson<Limits>('limits', {}, signal),
 
-  cells: (area: AreaOfInterest, month: string, signal?: AbortSignal) =>
-    getJson<CellCollection>('cells', { ...areaQuery(area), month }, signal),
+  /** Contorno oficial del departamento o distrito; `null` para el resto de áreas. */
+  boundary: (area: AreaOfInterest, signal?: AbortSignal): Promise<GeoJSON.Feature | null> =>
+    area.kind === 'department' || area.kind === 'district' ? getJson<GeoJSON.Feature>('boundary', areaQuery(area), signal) : Promise.resolve(null),
 
-  ranking: (period: Period, signal?: AbortSignal) => getJson<RankingRow[]>('ranking', { ...period }, signal),
+  daily: (area: AreaOfInterest, signal?: AbortSignal) => getJson<DailySeries>('daily', { ...areaQuery(area) }, signal),
+
+  /** Sin mes: el mes en curso frente a su mediana histórica. */
+  anomaly: (area: AreaOfInterest, signal?: AbortSignal) => getJson<Anomaly>('anomaly', { ...areaQuery(area) }, signal),
+
+  cells: (area: AreaOfInterest, range: DayRange, signal?: AbortSignal) =>
+    getJson<CellCollection>('cells', { ...areaQuery(area), ...range }, signal),
+
+  points: (area: AreaOfInterest, range: DayRange, signal?: AbortSignal) =>
+    getJson<PointSample>('points', { ...areaQuery(area), ...range, limit: String(POINT_LIMIT) }, signal),
+
+  ranking: (range: DayRange, signal?: AbortSignal) => getJson<RankingRow[]>('ranking', { ...range }, signal),
 
   /** Enlaces de descarga para el área y el rango elegidos. */
-  downloadUrl: (file: 'hotspots.csv' | 'export.csv' | 'calendar.csv', area: AreaOfInterest, period: Period) =>
-    url(file, { ...areaQuery(area), ...period }),
+  downloadUrl: (file: 'hotspots.csv' | 'export.csv' | 'calendar.csv', area: AreaOfInterest, range: DayRange) =>
+    url(file, { ...areaQuery(area), ...range }),
 };

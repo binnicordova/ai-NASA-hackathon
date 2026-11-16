@@ -1,6 +1,6 @@
 import { compact, fmt, monthLabel, niceMax } from '../../shared/format';
 import { monthNames, t, type Key } from '../../shared/i18n';
-import { ACCENT, LEVEL_COLORS, MODIS_ERA, NEUTRAL, NEUTRAL_LINE, VIIRS_ERA } from '../../shared/palette';
+import { ACCENT, LEVEL_COLORS, NEUTRAL, NEUTRAL_LINE, VIIRS_ERA } from '../../shared/palette';
 import { metricNoun, metricValue, type BurnCalendar, type Metric, type YearTotal } from '../domain/types';
 
 // Todas las gráficas comparten el mismo lienzo: 324 de ancho, eje Y a la izquierda.
@@ -23,7 +23,6 @@ export function renderFrequencyChart(
   svg: SVGElement,
   calendar: BurnCalendar,
   selectedMonth: number | null,
-  onMonth: (month: number) => void,
 ): string {
   const top = 8;
   const bottom = 124;
@@ -44,10 +43,8 @@ export function renderFrequencyChart(
     }
     if (entry.month === selectedMonth) html += `<rect x="${x - 2}" y="${top - 2}" width="20" height="${bottom - top + 4}" fill="none" stroke="${ACCENT}" stroke-width="1.5" rx="3"/>`;
     html += `<text x="${x + 8}" y="138" text-anchor="middle">${monthNames()[entry.month - 1]![0]!.toUpperCase()}</text>`;
-    html += `<rect class="hit" x="${x - 4}" y="${top}" width="${band}" height="${bottom - top + 16}" data-month="${entry.month}"><title>${monthNames()[entry.month - 1]}</title></rect>`;
   }
   svg.innerHTML = html;
-  svg.querySelectorAll<SVGRectElement>('.hit').forEach((hit) => hit.addEventListener('click', () => onMonth(Number(hit.dataset.month))));
 
   const entry = calendar.levels.months.find((m) => m.month === selectedMonth);
   if (!entry || !entry.years) return t('freq.none');
@@ -76,7 +73,6 @@ export function renderYearsChart(
   const median = complete.length ? complete[Math.floor((complete.length - 1) / 2)]! : 0;
 
   let html = yAxis(top, bottom, max, [0, max / 2, max], compact);
-  const modisLine: string[] = [];
   years.forEach((year, index) => {
     const x = X0 + index * band + 1.5;
     const width = band - 3;
@@ -85,23 +81,19 @@ export function renderYearsChart(
     const fill = year.partial ? `fill="none" stroke="${NEUTRAL_LINE}" stroke-dasharray="2 2"` : `fill="${records.includes(year.year) ? VIIRS_ERA : NEUTRAL}"`;
     html += `<rect${faded} x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${width.toFixed(1)}" height="${(bottom - y).toFixed(1)}" rx="2" ${fill}/>`;
     if (metric === 'harmonized' && year.year < 2012) html += `<line x1="${(x + width / 2).toFixed(1)}" x2="${(x + width / 2).toFixed(1)}" y1="${Y(year.high).toFixed(1)}" y2="${Y(year.low).toFixed(1)}" stroke="var(--tx2)" stroke-width="1"/>`;
-    if (metric === 'events' && year.eventsModis !== null) modisLine.push(xy(x + width / 2, Y(year.eventsModis)));
     if (year.year === inspectedYear) html += `<rect x="${(x - 1.5).toFixed(1)}" y="${top - 2}" width="${(width + 3).toFixed(1)}" height="${bottom - top + 4}" fill="none" stroke="${ACCENT}" stroke-width="1.5" rx="3"/>`;
     if (year.year % 5 === 0) html += `<text x="${(x + width / 2).toFixed(1)}" y="142" text-anchor="middle">${year.year}</text>`;
     const extra =
       (year.partial ? t('years.partial') : '') +
-      (metric === 'events' && year.eventsModis !== null ? t('years.modisOnly', { v: fmt(year.eventsModis) }) : '') +
       (metric === 'harmonized' && year.year < 2012 ? t('years.band', { a: fmt(year.low), b: fmt(year.high) }) : '');
     html += `<rect class="hit" x="${(X0 + index * band).toFixed(1)}" y="${top}" width="${band.toFixed(1)}" height="${bottom - top}" data-year="${year.year}"><title>${year.year}: ${fmt(value(year))} ${metricNoun(metric)}${extra}</title></rect>`;
   });
   if (metric === 'harmonized') html += `<line x1="${X0}" x2="${X1}" y1="${Y(median)}" y2="${Y(median)}" stroke="${NEUTRAL_LINE}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
-  if (metric === 'events' && modisLine.length) html += `<polyline fill="none" stroke="${MODIS_ERA}" stroke-width="2" points="${modisLine.join(' ')}"/>`;
   svg.innerHTML = html;
   svg.querySelectorAll<SVGRectElement>('.hit').forEach((hit) => hit.addEventListener('click', () => onYear(Number(hit.dataset.year))));
 
-  const inRange = t('years.range', { v: fmt(metricValue(calendar.rangeSummary, metric)), noun: metricNoun(metric) });
-  if (metric === 'harmonized') return inRange + t('years.h', { years: records.join(', ') || '—', m: compact(median) });
-  return inRange + t(metric === 'hotspots' ? 'years.r' : 'years.e');
+  if (metric === 'harmonized') return t('years.h', { years: records.join(', ') || '—', m: compact(median) });
+  return t('years.r');
 }
 
 /** El año inspeccionado, mes a mes, sobre el rango habitual (percentiles 10 a 90) y la mediana. */

@@ -1,10 +1,11 @@
 import { el } from '../../shared/dom';
 import { compact, fmt, monthKey, monthLabel } from '../../shared/format';
 import { monthNames, t } from '../../shared/i18n';
-import { ACCENT, RAMP, RAMP_INK, quantileBreaks, rampIndex } from '../../shared/palette';
+import { RAMP, RAMP_INK, quantileBreaks, rampIndex } from '../../shared/palette';
 import { metricNoun, metricValue, type BurnCalendar, type Metric, type MonthPoint } from '../domain/types';
 
 interface Handlers {
+  /** Clic en un mes: el rango pasa a ser ese mes completo. */
   onSelect: (year: number, month: number) => void;
   onYear: (year: number) => void;
 }
@@ -18,9 +19,12 @@ export function renderHeatmap(
   container: HTMLElement,
   calendar: BurnCalendar,
   metric: Metric,
-  selected: { year: number; month: number } | null,
+  range: { from: string; to: string },
   handlers: Handlers,
 ): void {
+  // Meses que tocan el rango elegido (con precisión de días): los demás se atenúan.
+  const fromKey = range.from.slice(0, 7);
+  const toKey = range.to.slice(0, 7);
   const breaks = quantileBreaks(calendar.series.map((p) => metricValue(p, metric)));
   const points = indexByMonth(calendar);
   const firstYear = calendar.series[0]!.year;
@@ -41,16 +45,14 @@ export function renderHeatmap(
         continue;
       }
       const value = metricValue(point, metric);
-      const isSelected = selected?.year === year && selected.month === month;
       const cell = el('button', {
         className: 'cal-cell',
         type: 'button',
-        title: `${monthLabel(year, month)}: ${fmt(value)} ${metricNoun(metric)}`,
+        title: `${monthLabel(year, month)}: ${fmt(value)} ${metricNoun(metric)} · ${t('cal.pick')}`,
         style:
           // Un mes sin focos no lleva color de fuego: se distingue de "poca actividad".
           `background:${value > 0 ? RAMP[rampIndex(value, breaks)] : 'var(--s1)'};` +
-          (key < calendar.range.from || key > calendar.range.to ? 'opacity:.3;' : '') +
-          (isSelected ? `box-shadow:0 0 0 2px ${ACCENT};` : ''),
+          (key < fromKey || key > toKey ? 'opacity:.3;' : ''),
       });
       cell.setAttribute('aria-label', cell.title);
       cell.addEventListener('click', () => handlers.onSelect(year, month));
