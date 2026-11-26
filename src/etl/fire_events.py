@@ -141,8 +141,8 @@ def add_department(events: pd.DataFrame, hf) -> pd.DataFrame:
     return events
 
 
-def export_clean_points(clean: pd.DataFrame, hf, out: Path) -> int:
-    """Guarda los focos limpios, uno por fila, para la descarga CSV de focos por área y fechas."""
+def points_frame(clean: pd.DataFrame, hf) -> pd.DataFrame:
+    """Focos limpios, uno por fila, para la descarga CSV de focos por área y fechas."""
     import h3
 
     cells = pd.unique(clean["h3_res6"])
@@ -164,6 +164,12 @@ def export_clean_points(clean: pd.DataFrame, hf, out: Path) -> int:
             "department": clean["h3_res6"].map(dict(zip(cells, dept))).to_numpy(),
         }
     ).sort_values(["acq_date", "acq_time"])
+    return points
+
+
+def export_clean_points(clean: pd.DataFrame, hf, out: Path) -> int:
+    """Guarda los focos limpios en hotspots_clean.parquet."""
+    points = points_frame(clean, hf)
     points.to_parquet(out / "hotspots_clean.parquet", index=False)
     return len(points)
 

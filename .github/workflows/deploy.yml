@@ -35,6 +35,8 @@ jobs:
       - name: Pruebas de functions/
         working-directory: functions
         run: uv run --frozen pytest -q
+      - name: Pruebas de la cola de datos (src/etl)
+        run: uv run --with pytest --with pandas --with numpy --with scipy --with h3 --with pyarrow pytest src/etl/tests -q
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -69,6 +71,7 @@ jobs:
             --project "$PROJECT_ID" --region "$REGION" \
             --memory 2Gi --cpu 1 --concurrency 40 \
             --min-instances 0 --max-instances 3 --timeout 900 \
+            --update-env-vars "FIRE_TAIL_URI=gs://nasat-fire-calendar-data/tail,FIRE_TAIL_POLL_SECONDS=120" \
             --labels "commit-sha=${GITHUB_SHA::12}" \
             --quiet
 

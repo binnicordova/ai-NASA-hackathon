@@ -1,0 +1,7 @@
+# Las versiones con las que se probó (src/etl/tests y la comparación con la base del 8 al 12 nov).
+pandas==3.1.1
+numpy==2.5.5
+scipy==1.18.1
+h3==4.5.1
+pyarrow==26.0.1
+google-cloud-storage==3.17.2

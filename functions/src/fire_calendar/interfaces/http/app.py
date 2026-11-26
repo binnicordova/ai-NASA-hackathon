@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from fire_calendar.calendar.application.use_cases import (
     GetActiveCells,
@@ -24,6 +25,7 @@ from fire_calendar.calendar.application.use_cases import (
     GetHotspotPoints,
 )
 from fire_calendar.calendar.infrastructure.duckdb_gateway import DuckDbHarmonizedSeriesGateway
+from fire_calendar.calendar.infrastructure.tail_source import ReloadingGateway, TailSnapshot, TailSource
 from fire_calendar.hotspots.application.export_csv import ExportActivityCsv, ExportHotspotsCsv, stream_csv
 from datetime import date
 
@@ -42,18 +44,33 @@ CAVEATS = [
     "Raw hot spots and fire events are not comparable across years because the number of sensors changes.",
     "Activity before mid-2002 is extrapolated from Terra only and has low confidence.",
     "Departments and districts follow official INEI boundaries, assigned by H3 cell (~36 km²).",
+    "The most recent months are near-real-time data: NASA replaces them with standard-quality data about three months later, so they can change slightly.",
     "The fire prediction is seasonal: a Poisson model (Poisson-Gamma when years vary more) of MODIS fire events in the same month of past years. It uses no weather and is checked out of sample (2021 onwards).",
 ]
 
 
-def create_app(gateway: DuckDbHarmonizedSeriesGateway | None = None) -> FastAPI:
-    gateway = gateway or DuckDbHarmonizedSeriesGateway(
-        DATA_DIR / "harmonized_fires.parquet",
-        events_parquet=DATA_DIR / "fire_events.parquet",
-        summary_json=DATA_DIR / "calendar_summary.json",
-        hotspots_parquet=DATA_DIR / "hotspots_clean.parquet",
-        limits_json=DATA_DIR / "peru_limits.json",
-    )
+def default_gateway() -> DuckDbHarmonizedSeriesGateway | ReloadingGateway:
+    """La base de data/processed; con FIRE_TAIL_URI, además la cola de datos nuevos, que se recarga sola."""
+
+    def build(tail: TailSnapshot | None) -> DuckDbHarmonizedSeriesGateway:
+        return DuckDbHarmonizedSeriesGateway(
+            DATA_DIR / "harmonized_fires.parquet",
+            events_parquet=DATA_DIR / "fire_events.parquet",
+            summary_json=DATA_DIR / "calendar_summary.json",
+            hotspots_parquet=DATA_DIR / "hotspots_clean.parquet",
+            limits_json=DATA_DIR / "peru_limits.json",
+            tail=tail,
+        )
+
+    uri = os.environ.get("FIRE_TAIL_URI")
+    if not uri:
+        return build(None)
+    source = TailSource(uri, Path(os.environ.get("FIRE_TAIL_CACHE", "/tmp/fire-tail")))
+    return ReloadingGateway(build, source, interval=float(os.environ.get("FIRE_TAIL_POLL_SECONDS", "120")))
+
+
+def create_app(gateway: DuckDbHarmonizedSeriesGateway | ReloadingGateway | None = None) -> FastAPI:
+    gateway = gateway or default_gateway()
     get_calendar = GetBurnCalendar(gateway)
     get_anomaly = GetAnomaly(gateway)
     get_cells = GetActiveCells(gateway)
@@ -66,6 +83,14 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | None = None) -> FastAPI:
 
     app = FastAPI(title="Fire calendar · functions", version="1.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.add_middleware(GZipMiddleware, minimum_size=2000)
+
+    @app.middleware("http")
+    async def refresh_tail(request: Request, call_next):
+        due = getattr(gateway, "refresh_due", None)  # solo el gateway con cola lo tiene
+        if due and due():
+            await run_in_threadpool(gateway.refresh)  # en esta petición: entre peticiones Cloud Run casi no da CPU
+        return await call_next(request)
+
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
 
     @app.exception_handler(DomainError)
@@ -106,8 +131,10 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | None = None) -> FastAPI:
     @app.get("/api/v1/meta")
     def meta() -> dict:
         first, last = gateway.date_span()
+        tail = gateway.tail_info()
         return {
             "firstDate": first, "lastDate": last, "departments": gateway.departments(),
+            "dataUpdatedAt": tail["generatedAt"] if tail else None, "tail": tail,
             "source": "NASA FIRMS: MODIS Collection 6.1 and VIIRS Collection 2 (S-NPP, NOAA-20, NOAA-21)",
             "validation": gateway.validation(), "caveats": CAVEATS,
             "hasHotspotPoints": export_hotspots.available,

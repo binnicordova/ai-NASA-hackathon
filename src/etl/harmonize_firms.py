@@ -698,61 +698,47 @@ def evaluate_validation_metrics(
     }
 
 
-def run_pipeline() -> None:
-    """Ejecuta el pipeline completo de auditoría, limpieza, armonización y exportación."""
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+def write_frozen_params(path: Path, factors: dict[str, Any], static_h3_res7: set[str]) -> None:
+    """Guarda con toda su precisión lo que la cola de datos nuevos necesita para calcular igual que la base.
 
-    print("[1/6] Escaneando y estandarizando archivos CSV en data/...")
-    combined, audit_records = discover_and_audit_csvs()
-    total_raw_rows = len(combined)
+    `calendar_summary.json` redondea los factores a 4 decimales; aquí van completos. Las constantes
+    de calibración (2012-2025) y la máscara de fuentes estáticas no cambian con los días nuevos.
+    """
 
-    keep_conf_mask = combined["confidence"] != "l"
-    low_conf_total = int((~keep_conf_mask).sum())
-    df_conf = combined[keep_conf_mask].copy()
+    def plain(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {(",".join(map(str, k)) if isinstance(k, tuple) else str(k)): plain(v) for k, v in value.items()}
+        return value
 
-    print("[2/6] Deduplicando registros Archive vs NRT...")
-    df_conf["lat_round4"] = df_conf["latitude"].round(4)
-    df_conf["lon_round4"] = df_conf["longitude"].round(4)
-    df_conf = df_conf.sort_values(by=["is_archive", "file_idx"], ascending=[False, True])
-    before_dedup = len(df_conf)
-    df_dedup = df_conf.drop_duplicates(
-        subset=["satellite", "acq_date", "acq_time", "lat_round4", "lon_round4"],
-        keep="first",
-    ).copy()
-    dedup_removed = before_dedup - len(df_dedup)
+    payload = {
+        "calibration_years": [CALIBRATION_START_YEAR, CALIBRATION_END_YEAR],
+        "factors": plain(factors),
+        "static_h3_res7": sorted(static_h3_res7),
+    }
+    path.write_text(json.dumps(payload, separators=(",", ":"), sort_keys=True), encoding="utf-8")
 
-    print("[3/6] Construyendo máscara espacial H3 Res 7 (MODIS type != 0) y asignando H3 Res 6...")
-    df_dedup = assign_h3_indices(df_dedup)
 
-    modis_static_rows = df_dedup[
-        (df_dedup["instrument"] == "MODIS")
-        & (df_dedup["is_archive"])
-        & (df_dedup["type"].notna())
-        & (df_dedup["type"] != 0)
-    ]
-    static_h3_res7 = set(modis_static_rows["h3_res7"].unique())
+def load_frozen_params(path: Path) -> tuple[dict[str, Any], set[str]]:
+    """Inversa de write_frozen_params: factores con las claves originales (mes entero, (k, mes))."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    factors: dict[str, Any] = {}
+    for name, table in raw["factors"].items():
+        if name == "terra_effective_gamma_by_ym":
+            factors[name] = table
+        elif name == "beta_constellation":
+            factors[name] = {tuple(int(x) for x in k.split(",")): v for k, v in table.items()}
+        else:
+            factors[name] = {int(k): v for k, v in table.items()}
+    return factors, set(raw["static_h3_res7"])
 
-    in_static_mask = df_dedup["h3_res7"].isin(static_h3_res7)
-    static_filtered_total = int(in_static_mask.sum())
 
-    other_non_veg_mask = (~in_static_mask) & df_dedup["type"].notna() & (df_dedup["type"] != 0)
-    other_non_veg_total = int(other_non_veg_mask.sum())
+def harmonize_daily(clean_df: pd.DataFrame, factors: dict[str, Any]) -> pd.DataFrame:
+    """Agrega celdas-día H3 Res 6 y aplica los factores de calibración (pasos 4-5 de run_pipeline).
 
-    static_by_file = df_dedup[in_static_mask].groupby("file_idx").size().to_dict()
-    other_by_file = df_dedup[other_non_veg_mask].groupby("file_idx").size().to_dict()
-    for i, rec in enumerate(audit_records):
-        rec.static_mask_filtered = int(static_by_file.get(i, 0))
-        rec.other_non_veg_filtered = int(other_by_file.get(i, 0))
-
-    clean_df = df_dedup[~in_static_mask & ~other_non_veg_mask].copy()
-    clean_df["year"] = clean_df["acq_date"].str[:4].astype(np.int16)
-    clean_df["month"] = clean_df["acq_date"].str[5:7].astype(np.int8)
-    clean_df["k_viirs"] = build_viirs_constellation_size(clean_df["acq_date"])
-
-    print("[4/6] Agregando celdas-día H3 Res 6 y calculando factores de calibración...")
-    factors = compute_calibration_factors(clean_df)
-
+    Cada celda-día se calcula sola con los factores recibidos; por eso se usa igual en la
+    reconstrucción completa y en la cola de datos nuevos (src/etl/firms_tail.py).
+    Deja en `factors["terra_effective_gamma_by_ym"]` el resumen del factor Terra efectivo.
+    """
     daily = (
         clean_df.groupby(["h3_res6", "acq_date", "year", "month", "instrument"], as_index=False)
         .agg(
@@ -891,6 +877,66 @@ def run_pipeline() -> None:
     daily = daily[parquet_cols].sort_values(["acq_date", "h3_res6", "instrument"]).reset_index(
         drop=True
     )
+    return daily
+
+
+def run_pipeline() -> None:
+    """Ejecuta el pipeline completo de auditoría, limpieza, armonización y exportación."""
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    print("[1/6] Escaneando y estandarizando archivos CSV en data/...")
+    combined, audit_records = discover_and_audit_csvs()
+    total_raw_rows = len(combined)
+
+    keep_conf_mask = combined["confidence"] != "l"
+    low_conf_total = int((~keep_conf_mask).sum())
+    df_conf = combined[keep_conf_mask].copy()
+
+    print("[2/6] Deduplicando registros Archive vs NRT...")
+    df_conf["lat_round4"] = df_conf["latitude"].round(4)
+    df_conf["lon_round4"] = df_conf["longitude"].round(4)
+    df_conf = df_conf.sort_values(by=["is_archive", "file_idx"], ascending=[False, True])
+    before_dedup = len(df_conf)
+    df_dedup = df_conf.drop_duplicates(
+        subset=["satellite", "acq_date", "acq_time", "lat_round4", "lon_round4"],
+        keep="first",
+    ).copy()
+    dedup_removed = before_dedup - len(df_dedup)
+
+    print("[3/6] Construyendo máscara espacial H3 Res 7 (MODIS type != 0) y asignando H3 Res 6...")
+    df_dedup = assign_h3_indices(df_dedup)
+
+    modis_static_rows = df_dedup[
+        (df_dedup["instrument"] == "MODIS")
+        & (df_dedup["is_archive"])
+        & (df_dedup["type"].notna())
+        & (df_dedup["type"] != 0)
+    ]
+    static_h3_res7 = set(modis_static_rows["h3_res7"].unique())
+
+    in_static_mask = df_dedup["h3_res7"].isin(static_h3_res7)
+    static_filtered_total = int(in_static_mask.sum())
+
+    other_non_veg_mask = (~in_static_mask) & df_dedup["type"].notna() & (df_dedup["type"] != 0)
+    other_non_veg_total = int(other_non_veg_mask.sum())
+
+    static_by_file = df_dedup[in_static_mask].groupby("file_idx").size().to_dict()
+    other_by_file = df_dedup[other_non_veg_mask].groupby("file_idx").size().to_dict()
+    for i, rec in enumerate(audit_records):
+        rec.static_mask_filtered = int(static_by_file.get(i, 0))
+        rec.other_non_veg_filtered = int(other_by_file.get(i, 0))
+
+    clean_df = df_dedup[~in_static_mask & ~other_non_veg_mask].copy()
+    clean_df["year"] = clean_df["acq_date"].str[:4].astype(np.int16)
+    clean_df["month"] = clean_df["acq_date"].str[5:7].astype(np.int8)
+    clean_df["k_viirs"] = build_viirs_constellation_size(clean_df["acq_date"])
+
+    print("[4/6] Agregando celdas-día H3 Res 6 y calculando factores de calibración...")
+    factors = compute_calibration_factors(clean_df)
+
+    daily = harmonize_daily(clean_df, factors)
+    write_frozen_params(PROCESSED_DIR / "frozen_params.json", factors, static_h3_res7)
 
     print("[5/6] Exportando artefactos en data/processed/...")
     parquet_path = PROCESSED_DIR / "harmonized_fires.parquet"

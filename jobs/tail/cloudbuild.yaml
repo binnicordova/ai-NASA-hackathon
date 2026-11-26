@@ -1,0 +1,10 @@
+# gcloud builds submit --project nasat-fire-calendar --config jobs/tail/cloudbuild.yaml .
+# (una imagen aparte de la del servicio: la del servicio usa el Dockerfile de la raíz)
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "jobs/tail/Dockerfile", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
+substitutions:
+  _IMAGE: us-east1-docker.pkg.dev/nasat-fire-calendar/cloud-run-source-deploy/fire-tail:latest
+options:
+  logging: CLOUD_LOGGING_ONLY

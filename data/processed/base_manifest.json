@@ -1,0 +1,5 @@
+{
+  "cutoff": "2026-11-12",
+  "baseThrough": "2026-11-11",
+  "why": "Los días desde el corte vienen de la cola (src/etl/firms_tail.py), no de los parquets de esta carpeta. El 13 y el 14 nov de la descarga manual estaban incompletos (sin Aqua; solo 2 focos el 14)."
+}
