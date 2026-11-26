@@ -23,6 +23,15 @@ FALLBACK = """<!doctype html><html lang="es"><head><meta charset="utf-8"><title>
 <p id="sheetWatch"><!--ssr:watch--></p><nav id="sheetNearby"><!--ssr:nearby--></nav></main></body></html>"""
 
 
+def template_index(web_dist: Path) -> str:
+    """La app compilada; sin ella, una página mínima con las etiquetas que se reemplazan."""
+    built = web_dist / "index.html"
+    if built.exists():
+        return built.read_text(encoding="utf-8")
+    return ('<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="description" content="">'
+            '<title>NASAT</title><link rel="canonical" href="https://nasat.space/"></head><body></body></html>')
+
+
 def template_from(web_dist: Path) -> str:
     built = web_dist / "sheet.html"
     return built.read_text(encoding="utf-8") if built.exists() else FALLBACK

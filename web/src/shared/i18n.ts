@@ -4,6 +4,7 @@ export type Lang = 'es' | 'en';
 
 const es = {
   'app.title': 'NASAT · Calendario de quema',
+  'app.title.place': 'Incendios en {place}: calendario de quema y focos de calor · NASAT',
   'app.subtitle': 'Harmonization of MODIS and VIIRS Hot Spots',
   'lang.switch': 'English',
   'metric.events.label': 'Eventos de fuego',
@@ -416,6 +417,7 @@ export type Key = keyof typeof es;
 
 const en: Record<Key, string> = {
   'app.title': 'NASAT · Burn calendar',
+  'app.title.place': 'Wildfires in {place}: burn calendar and hot spots · NASAT',
   'app.subtitle': 'Harmonization of MODIS and VIIRS Hot Spots',
   'lang.switch': 'Español',
   'metric.events.label': 'Fire events',
@@ -833,6 +835,9 @@ const STORAGE_KEY = 'fire-calendar-lang';
 function initialLang(): Lang {
   const fromUrl = new URLSearchParams(location.search).get('lang');
   if (fromUrl === 'es' || fromUrl === 'en') return fromUrl;
+  // Las direcciones legibles llevan su idioma: /en/map/… y /en/wildfires/… en inglés; /mapa/… e /incendios/… en español.
+  if (/^\/en(\/|$)/.test(location.pathname)) return 'en';
+  if (/^\/(mapa|incendios)(\/|$)/.test(location.pathname)) return 'es';
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'es' || stored === 'en') return stored;

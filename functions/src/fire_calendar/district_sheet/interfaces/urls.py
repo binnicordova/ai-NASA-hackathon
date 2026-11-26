@@ -15,6 +15,7 @@ import unicodedata
 from ..domain.model import DistrictName
 
 SECTION = {"es": "incendios", "en": "en/wildfires"}
+MAP = {"es": "mapa", "en": "en/map"}
 
 
 def slugify(text: str) -> str:
@@ -29,3 +30,10 @@ def slugs(district: DistrictName) -> tuple[str, str, str]:
 
 def district_path(district: DistrictName, lang: str) -> str:
     return "/" + "/".join((SECTION[lang], *slugs(district)))
+
+
+def map_path(slug_parts: tuple[str, ...], lang: str) -> str:
+    """Mapa de un área oficial: `/mapa/cusco/canchis`. Todo el Perú es la portada: `/` (en inglés, `/en/map`)."""
+    if not slug_parts:
+        return "/en/map" if lang == "en" else "/"
+    return "/" + "/".join((MAP[lang], *slug_parts))

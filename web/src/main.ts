@@ -19,6 +19,7 @@ import { hexOpacity } from './area-of-interest/ui/mapView';
 import { readUrlState, writeUrlState } from './shared/urlState';
 import type { TourHost } from './sample-case/ui/caseTour';
 import { districtPath } from './district-sheet/domain/sheet';
+import { mapPath, placeTitle } from './area-of-interest/domain/paths';
 
 const controller = new CalendarController();
 // La pestaña del enlace decide el ancho del mapa (Focos crudos no tiene panel): se aplica antes de crear el mapa,
@@ -525,7 +526,20 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
   }
   byId('legendPoint').hidden = !points?.points.length;
   if (changed.area && changed.map) map.focusArea(selection.area, data.boundary?.geometry ?? null);
-  writeUrlState(selection);
+  writeUrlState(selection, lang(), meta);
+  renderPageHead(selection.area);
+}
+
+/**
+ * Título y dirección canónica de la vista: "Incendios en Sicuani (Canchis, Cusco): …". functions/ escribe lo mismo en
+ * el HTML de cada área (lo que leen los buscadores); aquí se mantiene al cambiar de área o de idioma.
+ */
+function renderPageHead(area: AreaOfInterest): void {
+  const place = placeTitle(area);
+  document.title = place ? t('app.title.place', { place }) : t('app.title');
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  const path = mapPath(area, lang());
+  if (canonical && path && (area.kind !== 'bbox' && area.kind !== 'polygon')) canonical.href = new URL(path, canonical.href).href;
 }
 
 translateDocument();
@@ -561,6 +575,8 @@ paintThemeButton();
 window.addEventListener('resize', () => map.resize());
 // Un enlace compartido pegado en la misma pestaña cambia solo el fragmento: se aplica sin recargar.
 window.addEventListener('hashchange', () => void controller.restore(readUrlState()));
+// Atrás y adelante entre áreas: cada área es una entrada del historial con su propia dirección.
+window.addEventListener('popstate', () => void controller.restore(readUrlState()));
 const initialState = readUrlState();
 const started = controller.start(initialState);
 

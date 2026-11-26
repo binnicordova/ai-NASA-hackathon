@@ -3,6 +3,7 @@ import qrcode from 'qrcode-generator';
 import '../../styles.css';
 import './sheet.css';
 import type { AreaOfInterest } from '../../area-of-interest/domain/area';
+import { mapPath } from '../../area-of-interest/domain/paths';
 import { calendarApi } from '../../calendar/infrastructure/calendarApiClient';
 import type { AreaForecast, BurnCalendar, Meta, PointSample } from '../../calendar/domain/types';
 import { watchMonths } from '../../calendar/domain/watch';
@@ -82,12 +83,13 @@ function sheetBreaks(calendar: BurnCalendar): number[] {
   return quantileBreaks(calendar.series.map((p) => p.harmonized).filter((v) => v > 0));
 }
 
-let currentUbigeo = '';
+let currentArea: SheetData['area'] | null = null;
 /** Un mes del calendario, abierto en la app: ese distrito y ese mes completo. */
 function mapUrl(year: number, month: number): string {
   const key = `${year}-${String(month).padStart(2, '0')}`;
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return `/#district=${currentUbigeo}&from=${key}-01&to=${key}-${lastDay}`;
+  const lastDay = String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0');
+  const [from, to] = lang() === 'en' ? ['from', 'to'] : ['desde', 'hasta'];
+  return `${currentArea ? mapPath(currentArea, lang()) : '/'}?${from}=${key}-01&${to}=${key}-${lastDay}`;
 }
 
 function renderForecast({ meta, forecast }: SheetData): void {
@@ -188,7 +190,7 @@ function renderFooter(data: SheetData): void {
   byId('sheetQr').querySelector('svg')?.setAttribute('aria-hidden', 'true');
   byId('sheetUrl').textContent = url.replace(/^https?:\/\//, '');
   byId('sheetMade').textContent = t('sheet.made', { date: dayLabel(new Date().toLocaleDateString('en-CA')) });
-  byId<HTMLAnchorElement>('sheetMapLink').href = `/#district=${data.area.ubigeo}`;
+  byId<HTMLAnchorElement>('sheetMapLink').href = mapPath(data.area, lang()) ?? '/';
 }
 
 function render(data: SheetData): void {
@@ -226,7 +228,6 @@ async function load(): Promise<void> {
   if (!byId('sheetName').textContent?.trim()) byId('sheetName').textContent = t('sheet.loading');
   const ubigeo = ubigeoFrom(document, location);
   if (!ubigeo) return showMessage('sheet.missing');
-  currentUbigeo = ubigeo;
   const [meta, limits] = await Promise.all([calendarApi.meta(), calendarApi.limits()]);
   const area = districtArea(limits, ubigeo);
   if (!area) return showMessage('sheet.unknown');
@@ -238,6 +239,7 @@ async function load(): Promise<void> {
     calendarApi.points(area, range),
   ]);
   const data: SheetData = { area, meta, calendar, forecast, boundary, recent, range };
+  currentArea = area;
   render(data);
 
   byId('sheetLang').addEventListener('click', () => {

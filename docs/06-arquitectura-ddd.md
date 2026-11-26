@@ -93,7 +93,7 @@ web/src/
 
 El área es todo el Perú (sin parámetros), un `department`, un `district` (ubigeo de 6 dígitos), una caja `bbox=oeste,sur,este,norte` o un `polygon=lon,lat;lon,lat;...` dibujado (hasta 500 vértices). Departamentos y distritos usan los límites oficiales del INEI (`data/processed/peru_limits.json`, de `src/etl/peru_limits.py`); como los polígonos dibujados, se ajustan a la grilla H3 res 6: cuenta cada celda cuyo centro cae dentro. `from` y `to` aceptan días `AAAA-MM-DD` o meses `AAAA-MM` (primer y último día del mes); `/calendar` y `/calendar.csv` son mensuales y usan el mes de cada fecha. Documentación interactiva en `/api/docs`.
 
-Fuera del prefijo, `/incendios/<departamento>/<provincia>/<distrito>` (y `/en/wildfires/…`) sirve la ficha imprimible del distrito (`web/sheet.html`) con su HTML para buscadores (título, canónica, hreflang, datos estructurados `Dataset`); `/d/<ubigeo>` redirige a ella, y `/sitemap.xml` y `/robots.txt` la anuncian; vive en el contexto `district_sheet/`, que solo junta lo que ya dicen el Calendario y la Alerta temprana.
+Fuera del prefijo, `/incendios/<departamento>/<provincia>/<distrito>` (y `/en/wildfires/…`) sirve la ficha imprimible del distrito (`web/sheet.html`) con su HTML para buscadores (título, canónica, hreflang, datos estructurados `Dataset`); `/d/<ubigeo>` redirige a ella, y `/sitemap.xml` y `/robots.txt` la anuncian. `/mapa/<departamento>[/<provincia>[/<distrito>]]` (y `/en/map/…`) sirve la app en esa área oficial con su título, descripción, canónica y hreflang; los filtros van en la consulta (`?desde=&hasta=&vista=`); vive en el contexto `district_sheet/`, que solo junta lo que ya dicen el Calendario y la Alerta temprana.
 
 ## Propuesta original
 

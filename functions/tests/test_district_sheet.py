@@ -73,8 +73,10 @@ def test_old_and_odd_addresses_redirect_to_the_readable_one(client):
 def test_sitemap_lists_every_district_in_both_languages(client):
     sitemap = client.get("/sitemap.xml")
     assert sitemap.headers["content-type"].startswith("application/xml")
-    assert sitemap.text.count("<url>") == 1 + 2 * 1890
+    # La portada y el mapa de cada área oficial (25 + 196 + 1 890) y la ficha de cada distrito, en los dos idiomas.
+    assert sitemap.text.count("<url>") == 2 + 2 * (25 + 196 + 1890) + 2 * 1890
     assert "<loc>http://testserver/incendios/cusco/canchis/sicuani</loc>" in sitemap.text
+    assert "<loc>http://testserver/mapa/cusco/canchis</loc>" in sitemap.text and "<loc>http://testserver/en/map</loc>" in sitemap.text
     robots = client.get("/robots.txt").text
     assert "Disallow: /api/" in robots and "Allow: /api/v1/preview/" in robots and "Sitemap: http://testserver/sitemap.xml" in robots
 
@@ -92,3 +94,36 @@ def test_preview_is_a_1200_by_630_png(client):
     assert response.status_code == 200 and response.headers["content-type"] == "image/png"
     assert Image.open(io.BytesIO(response.content)).size == (1200, 630)
     assert client.get("/api/v1/preview/district/999999.png").status_code == 404
+
+
+@needs_data
+def test_each_official_area_has_a_readable_map_page(client):
+    page = client.get("/mapa/cusco/canchis")
+    assert page.status_code == 200
+    html = page.text
+    assert "<title>Incendios en Canchis (Cusco): calendario de quema y focos de calor · NASAT</title>" in html
+    assert '<link rel="canonical" href="http://testserver/mapa/cusco/canchis">' in html
+    assert '<link rel="alternate" hreflang="en" href="http://testserver/en/map/cusco/canchis">' in html
+    assert html.count('rel="canonical"') == 1 and html.count('hreflang="es"') == 1
+    assert "Temporada: julio, agosto y setiembre." in html
+    # La web lee el área de aquí (la dirección no lleva códigos).
+    assert "&quot;kind&quot;: &quot;province&quot;, &quot;code&quot;: &quot;0806&quot;" in html
+    english = client.get("/en/map/cusco").text
+    assert '<html lang="en"' in english and "<title>Wildfires in Cusco: burn calendar and hot spots · NASAT</title>" in english
+    district = client.get("/mapa/cusco/canchis/sicuani", params={"desde": "2026-10-03", "vista": "focos"}).text
+    # Fechas y pestaña son filtros de la misma página: la canónica no los lleva.
+    assert '<link rel="canonical" href="http://testserver/mapa/cusco/canchis/sicuani">' in district
+    assert "/api/v1/preview/district/080601.png" in district
+    assert client.get("/mapa/cusco/canchis/nada").status_code == 404
+
+
+@needs_data
+def test_map_addresses_have_one_canonical_form(client):
+    def moved(path: str) -> str:
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 301
+        return response.headers["location"]
+
+    assert moved("/mapa") == "/"
+    assert moved("/mapa/Cusco?desde=2026-10-03") == "/mapa/cusco?desde=2026-10-03"
+    assert moved("/mapa/huánuco/") == "/mapa/huanuco"
