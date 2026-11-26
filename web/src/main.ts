@@ -423,6 +423,10 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
     renderAbout(meta);
     byId<HTMLAnchorElement>('dlHotspots').hidden = !meta.hasHotspotPoints;
   }
+  // La ficha imprimible existe para los distritos oficiales: el enlace corto que se comparte.
+  const sheetOpen = byId<HTMLAnchorElement>('sheetOpen');
+  sheetOpen.hidden = selection.area.kind !== 'district';
+  if (selection.area.kind === 'district') sheetOpen.href = `/d/${selection.area.ubigeo}${lang() === 'en' ? '?lang=en' : ''}`;
   if (!calendar || !daily) return;
   const range = controller.range();
 

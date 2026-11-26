@@ -439,3 +439,7 @@ dialog::backdrop { background: rgba(7, 23, 63, .6); }
   animation: tour-live 2s ease-out infinite; }
 @keyframes tour-live { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--map-point) 60%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
 @media (prefers-reduced-motion: reduce) { .tour-live-dot { animation: none; } }
+/* Enlace a la ficha imprimible del distrito, bajo el selector de áreas oficiales. */
+.sheet-open { gap: 6px; margin-top: 6px; }
+.sheet-open[hidden] { display: none; }
+.sheet-open svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }

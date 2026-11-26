@@ -229,8 +229,9 @@ gcloud iam service-accounts add-iam-policy-binding $SA --project $PROJECT --role
 - NASA GIBS (Blue Marble) · satellite base map and the intro's 3D globe
 - Leaflet (BSD-2-Clause) · map
 - driver.js (MIT) · first-visit tour of the Sicuani sample case (added after the submission, 26 Nov 2026)
+- qrcode-generator (MIT) and Pillow (MIT-CMU) · QR code and share preview image of the printable district sheet (added after the submission, 26 Nov 2026)
 - Contains modified Copernicus Sentinel-2 data (2026) and Copernicus DEM GLO-30 (© DLR e.V. 2010–2014, © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA) · poster of the tour's 30 s video
-- Official NASA Space Apps logo, unaltered, and the palette, gradient and typefaces from its brand guide · Fira Sans and Overpass (SIL OFL, Google Fonts)
+- Official NASA Space Apps logo, unaltered, and the palette, gradient and typefaces from its brand guide · Fira Sans and Overpass (SIL OFL, Google Fonts; also bundled in `functions/` to draw the share preview image)
 - OpenStreetMap (ODbL) · base map tiles
 - DuckDB (MIT) · queries over the parquet
 - FastAPI (MIT), Uvicorn (BSD-3-Clause) · HTTP service

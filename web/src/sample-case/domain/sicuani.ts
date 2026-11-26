@@ -70,14 +70,8 @@ export function peakMonth(forecast: AreaForecast): MonthForecast | null {
   return months.length ? months.reduce((best, m) => (m.pAny > best.pAny ? m : best)) : null;
 }
 
-/** Los meses que conviene vigilar: los de más probabilidad (por encima de casi nula), en el orden del año. */
-export function watchMonths(forecast: AreaForecast, count = 3): MonthForecast[] {
-  return forecast.months
-    .filter((m) => m.pAny >= NEARLY_NONE)
-    .sort((a, b) => b.pAny - a.pAny)
-    .slice(0, count)
-    .sort((a, b) => a.month - b.month);
-}
+/** Los meses que conviene vigilar: la misma regla que la ficha del distrito y su vista previa. */
+export { watchMonths } from '../../calendar/domain/watch';
 
 /** Nombre de cada fuente en `meta.tail.lastObservation`: MODIS va en Terra y Aqua; VIIRS, en NOAA-20 y NOAA-21. */
 const SATELLITES: Record<string, string> = { MODIS: 'MODIS', N20: 'NOAA-20', N21: 'NOAA-21', SNPP: 'S-NPP' };

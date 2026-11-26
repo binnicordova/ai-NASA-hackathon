@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
@@ -26,6 +26,11 @@ from fire_calendar.calendar.application.use_cases import (
 )
 from fire_calendar.calendar.infrastructure.duckdb_gateway import DuckDbHarmonizedSeriesGateway
 from fire_calendar.calendar.infrastructure.tail_source import ReloadingGateway, TailSnapshot, TailSource
+from fire_calendar.district_sheet.application.use_cases import GetDistrictSheet
+from fire_calendar.district_sheet.interfaces.brand import brand_tokens
+from fire_calendar.district_sheet.interfaces.page import sheet_page, template_from
+from fire_calendar.district_sheet.interfaces.preview import render_preview
+from fire_calendar.district_sheet.interfaces.texts import TEXT, lang_of
 from fire_calendar.hotspots.application.export_csv import ExportActivityCsv, ExportHotspotsCsv, stream_csv
 from datetime import date
 
@@ -78,6 +83,7 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | ReloadingGateway | None 
     get_daily = GetDailyActivity(gateway)
     get_points = GetHotspotPoints(gateway)
     get_forecast = GetFireForecast(gateway)
+    get_sheet = GetDistrictSheet(gateway, get_forecast)
     export_csv = ExportActivityCsv(gateway)
     export_hotspots = ExportHotspotsCsv(gateway)
 
@@ -243,6 +249,40 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | ReloadingGateway | None 
                start: str | None = from_q, end: str | None = to_q) -> StreamingResponse:
         area, days = area_from(department, bbox, district, polygon, province), days_from(start, end)
         return csv_response(export_csv(area, days), f"fire-activity_{area.kind}_{days}.csv")
+
+    # --- Ficha del distrito: enlace corto que se comparte y su imagen de vista previa ----------------------
+
+    def _sheet_or_404(ubigeo: str, lang: str):
+        try:
+            return get_sheet(ubigeo)
+        except LookupError:
+            return None
+
+    @app.get("/d/{ubigeo}", include_in_schema=False)
+    def district_page(ubigeo: str, request: Request, lang: str | None = None) -> HTMLResponse:
+        """La ficha imprimible del distrito, con las etiquetas Open Graph para compartirla por WhatsApp o correo."""
+        language = lang_of(lang)
+        sheet = _sheet_or_404(ubigeo, language)
+        if sheet is None:  # la misma página, que dice que no encontró el distrito y enlaza al mapa
+            return HTMLResponse(template_from(WEB_DIST), status_code=404)
+        base = str(request.base_url).rstrip("/")
+        query = "?lang=en" if language == "en" else ""
+        page_url = f"{base}/d/{sheet.district.ubigeo}{query}"
+        # La fecha de los datos va en la imagen: cuando llegan datos nuevos, la vista previa cambia de dirección.
+        image_url = f"{base}/api/v1/preview/district/{sheet.district.ubigeo}.png?v={sheet.last_date}{'&lang=en' if query else ''}"
+        body = sheet_page(template_from(WEB_DIST), sheet, language, page_url, image_url)
+        return HTMLResponse(body, headers={"Cache-Control": "public, max-age=600"})
+
+    @app.get("/api/v1/preview/district/{ubigeo}.png")
+    def district_preview(ubigeo: str, request: Request, lang: str | None = None) -> Response:
+        """Imagen de 1200 × 630 de la ficha: nombre, meses a vigilar y calendario año × mes."""
+        language = lang_of(lang)
+        sheet = _sheet_or_404(ubigeo, language)
+        if sheet is None:
+            return JSONResponse({"error": f"Distrito desconocido: {ubigeo}"}, status_code=404)
+        short_url = f"{request.url.hostname}/d/{sheet.district.ubigeo}"
+        png = render_preview(sheet, brand_tokens(REPO_ROOT, WEB_DIST), language, short_url)
+        return Response(png, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
 
     if WEB_DIST.exists():  # un solo despliegue: la API sirve también la web compilada
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")

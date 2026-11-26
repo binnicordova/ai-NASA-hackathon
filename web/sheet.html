@@ -1,0 +1,76 @@
+<!doctype html>
+<!-- Ficha del distrito: siempre en tema claro, porque es una hoja para imprimir. -->
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NASAT · Ficha del distrito</title>
+  <link rel="icon" type="image/png" href="/brand/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@700;900&family=Overpass:ital,wght@0,400;0,700;1,400&display=swap">
+</head>
+<body class="sheet-page">
+  <div class="sheet-tools" role="toolbar">
+    <button type="button" class="btn primary" id="sheetPrint" data-i18n="sheet.print"></button>
+    <button type="button" class="btn" id="sheetShare" data-i18n="sheet.share"></button>
+    <a class="btn" id="sheetMapLink" href="/" data-i18n="sheet.map"></a>
+    <button type="button" class="btn" id="sheetLang" data-i18n="lang.switch"></button>
+    <span class="sheet-status" id="sheetStatus" role="status" aria-live="polite"></span>
+  </div>
+
+  <main class="sheet" id="sheet" aria-busy="true">
+    <header class="sheet-head">
+      <img class="sheet-logo" src="/brand/nasat.png" alt="NASAT" width="120" height="40">
+      <div class="sheet-id">
+        <p class="sheet-kicker" data-i18n="sheet.kicker"></p>
+        <h1 id="sheetName" data-i18n="sheet.loading"></h1>
+        <p class="sheet-parents" id="sheetParents"></p>
+      </div>
+      <p class="sheet-date" id="sheetDate"></p>
+    </header>
+
+    <div class="sheet-grid" id="sheetBody">
+      <section class="sheet-block" aria-labelledby="sheetCalTitle">
+        <h2 id="sheetCalTitle" data-i18n="sheet.calendar.title"></h2>
+        <p class="sheet-lead" id="sheetSeason"></p>
+        <div class="cal sheet-cal" id="sheetHeatmap" role="img"></div>
+        <div class="sheet-legend small" id="sheetLegend"></div>
+        <p class="sheet-note" id="sheetCalNote"></p>
+      </section>
+
+      <section class="sheet-block" aria-labelledby="sheetForecastTitle">
+        <h2 id="sheetForecastTitle"></h2>
+        <p class="sheet-lead" id="sheetWatch"></p>
+        <div class="sheet-months" id="sheetMonths" role="img"></div>
+        <p class="sheet-tested" id="sheetTested"></p>
+        <p class="sheet-note" data-i18n="sheet.forecast.note"></p>
+      </section>
+
+      <section class="sheet-block sheet-wide" aria-labelledby="sheetRecentTitle">
+        <h2 id="sheetRecentTitle" data-i18n="sheet.recent.title"></h2>
+        <div class="sheet-recent">
+          <svg class="sheet-map" id="sheetMap" role="img" data-i18n-aria="sheet.map.aria"></svg>
+          <div>
+            <p class="sheet-lead" id="sheetRecentRange"></p>
+            <dl class="sheet-counts" id="sheetCounts"></dl>
+            <p id="sheetRecentLast"></p>
+            <p class="sheet-note" data-i18n="sheet.recent.note"></p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="sheet-foot">
+      <div class="sheet-qr" id="sheetQr"></div>
+      <div>
+        <p class="sheet-qr-label" data-i18n="sheet.qr"></p>
+        <p class="sheet-url" id="sheetUrl"></p>
+        <p class="sheet-note" data-i18n="sheet.source"></p>
+        <p class="sheet-note" id="sheetMade"></p>
+      </div>
+    </footer>
+  </main>
+  <script type="module" src="/src/district-sheet/ui/sheetPage.ts"></script>
+</body>
+</html>

@@ -21,11 +21,13 @@ export function renderHeatmap(
   metric: Measure,
   range: { from: string; to: string },
   handlers: Handlers,
+  /** Cortes de la rampa ya calculados; por defecto, cuantiles de todos los meses. */
+  givenBreaks?: number[],
 ): void {
   // Meses que tocan el rango elegido (con precisión de días): los demás se atenúan.
   const fromKey = range.from.slice(0, 7);
   const toKey = range.to.slice(0, 7);
-  const breaks = quantileBreaks(calendar.series.map((p) => metricValue(p, metric)));
+  const breaks = givenBreaks ?? quantileBreaks(calendar.series.map((p) => metricValue(p, metric)));
   const points = indexByMonth(calendar);
   const firstYear = calendar.series[0]!.year;
   const lastYear = calendar.series.at(-1)!.year;
