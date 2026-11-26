@@ -199,5 +199,30 @@ def test_fire_forecast_is_poisson_and_checked_out_of_sample(client):
     cusco = client.get("/api/v1/forecast/area", params={"department": "Cusco"}).json()["months"][8]
     assert cusco["expected"] > 50 and cusco["pAny"] > 0.99 and cusco["low"] <= cusco["expected"] <= cusco["high"]
     assert client.get("/api/v1/forecast", params={"level": "x"}).status_code == 400
+
+
+def test_area_forecast_shows_its_history_and_is_tested_in_that_area(client):
+    """Un solo evento puede darse en cualquier parte: la predicción va con la historia del mes y su prueba en el área."""
+    sicuani = client.get("/api/v1/forecast/area", params={"district": "080601"}).json()
+    august = sicuani["months"][7]
+    # Agosto en Sicuani: fuego en 11 de 23 años (2003-2025), nunca más de 2 eventos; si lo hay, 1 o 2.
+    assert len(august["history"]) == 23 and sum(c > 0 for c in august["history"]) == august["yearsWithEvents"] == 11
+    assert max(august["history"]) == 2 and august["low"] == 0 and august["high"] == 2 and august["inRange"] == 23
+    assert august["ifAny"] == [1, 2] and 0.45 < august["pAny"] < 0.5
+    # Ajustada con 2003-2020, la predicción de Sicuani acertó el rango en 54 de los 60 meses de 2021-2025.
+    assert sicuani["check"]["test"] == [2021, 2025] and sicuani["check"]["cases"] == 60 and sicuani["check"]["inside"] == 54
+    cusco = client.get("/api/v1/forecast/area", params={"department": "Cusco"}).json()
+    assert cusco["months"][7]["inRange"] == 20 and cusco["check"]["inside"] == 48
+
+
+def test_probability_bands_mean_what_they_say(client):
+    """Calibración fuera de muestra: donde se dijo más probabilidad, hubo fuego más veces, y cerca de lo dicho."""
+    bands = client.get("/api/v1/forecast", params={"level": "district"}).json()["check"]["bands"]
+    assert [b["from"] for b in bands] == [0.67, 0.33, 0.05, 0.0]
+    observed = [b["observed"] for b in bands]
+    assert observed == sorted(observed, reverse=True)
+    # Distritos 2021-2025: alta 81 %, media 42 %, baja 12 %, casi nula 2 %.
+    assert [round(o * 100) for o in observed] == [81, 42, 12, 2]
+    assert all(abs(b["observed"] - b["predicted"]) < 0.06 for b in bands)
     shapes = client.get("/api/v1/shapes", params={"level": "province"}).json()
     assert len(shapes["features"]) == 196

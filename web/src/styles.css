@@ -30,6 +30,10 @@
   --map-hex: var(--fire-3); --map-point: #ff2a12; --map-ground: #2a3b2a;
   --c-neutral: #848fa6; --c-neutral-line: var(--tx2);
   --basemap-filter: none;
+  /* Velo del recorrido del caso Sicuani: azul de marca en el tema claro; en el oscuro, negro (el azul no se notaría). */
+  --tour-overlay: var(--deep-blue);
+  /* Cifra grande de la Alerta temprana: rojo marciano sobre claro; en el oscuro, un naranja que se lea sobre azul. */
+  --risk-figure: var(--fire-6);
   --r: 8px;
   color-scheme: light dark;
 }
@@ -46,6 +50,8 @@
     --c-viirs: var(--neon-yellow); --c-modis: var(--fire-3);
     /* El mapa de calles es claro: se atenúa para que las celdas brillantes sigan destacando. */
     --basemap-filter: brightness(.6) contrast(1.1) saturate(.6);
+    --tour-overlay: #000000;
+    --risk-figure: var(--fire-3);
   }
 }
 :root[data-theme="dark"] {
@@ -56,6 +62,8 @@
     --c-viirs: var(--neon-yellow); --c-modis: var(--fire-3);
     /* El mapa de calles es claro: se atenúa para que las celdas brillantes sigan destacando. */
     --basemap-filter: brightness(.6) contrast(1.1) saturate(.6);
+    --tour-overlay: #000000;
+    --risk-figure: var(--fire-3);
   }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -78,7 +86,9 @@ button, input, select { font: inherit; color: inherit; }
 .brand h1 { line-height: 0; flex: none; }
 .brand-nasat { height: 46px; width: auto; display: block; }
 .brand-sub { color: #c9e3ff; font-size: 12px; max-width: 440px; padding-left: 14px; border-left: 1px solid rgba(255, 255, 255, .28); }
-.top-actions { gap: 10px; margin-left: auto; }
+.top-actions { gap: 10px; }
+/* "Caso Sicuani" va junto a las pestañas; en el teléfono sube a la fila de los logos para no apretarlas. */
+.tour-btn { margin-left: auto; }
 /* Logo oficial sin alterar, con su zona de resguardo. */
 .brand-sa { display: block; flex: none; padding: 4px 0 4px 14px; border-left: 1px solid rgba(255, 255, 255, .28); }
 .brand-sa img { height: 40px; width: auto; display: block; }
@@ -201,7 +211,7 @@ dialog::backdrop { background: rgba(7, 23, 63, .6); }
   .app { grid-template-columns: minmax(0, 1fr); }
   .hide-narrow { display: none; }
   /* Cabecera en el teléfono: los dos logos arriba y los controles debajo, a todo el ancho. */
-  .brand { order: 1; } .brand-sa { order: 2; margin-left: auto; border-left: 0; } .brand-sa img { height: 34px; }
+  .brand { order: 1; } .tour-btn { order: 2; } .brand-sa { order: 2; border-left: 0; } .brand-sa img { height: 34px; }
   .top-actions { order: 3; width: 100%; margin-left: 0; } .top-actions .seg { flex: 1; } .top-actions .seg button { flex: 1; padding: 6px; }
   .map-wrap { min-height: 320px; } .stats { max-height: none; order: 4; } .range { order: 3; }
   input, select, .btn, .seg button, .btn.mini { min-height: 44px; } .brush-track { height: 60px; } .brush-handle { width: 18px; height: 40px; margin-top: -20px; } .cal > * { height: 16px; }
@@ -315,13 +325,27 @@ dialog::backdrop { background: rgba(7, 23, 63, .6); }
 .risk-hero[data-level="high"] .risk-level-badge { background: var(--fire-6); color: var(--white); }
 .risk-hero[data-level="none"] .risk-level-badge { background: var(--bd2); color: var(--tx); }
 .risk-big { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 2px; }
-.risk-big b { font-size: 42px; line-height: 1; font-variant-numeric: tabular-nums; color: var(--fire-6); }
+.risk-big b { font-size: 42px; line-height: 1; font-variant-numeric: tabular-nums; color: var(--risk-figure); }
 .risk-hero[data-level="none"] .risk-big b { color: var(--tx2); }
 .risk-big span { font-weight: 700; color: var(--tx2); }
 .risk-summary { margin: 4px 0 0; font-size: 13px; line-height: 1.4; }
 .risk-last { margin: 6px 0 0; padding-top: 6px; border-top: 1px dashed var(--bd2); color: var(--tx2); }
-.risk-last[data-where="above"] { color: var(--fire-6); font-weight: 700; }
+.risk-last[data-where="above"] { color: var(--risk-figure); font-weight: 700; }
 .risk-last[hidden] { display: none; }
+/* La historia del mes: una barra por año, la franja del rango del 80 % detrás y el último año aparte, con contorno. */
+.risk-history { margin: 8px 0 0; } .risk-history[hidden] { display: none; }
+.risk-history-bars { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 40px; border-bottom: 1px solid var(--bd2); }
+.risk-history-band { position: absolute; left: 0; right: 0; min-height: 2px; background: color-mix(in srgb, var(--tx) 9%, transparent);
+  border-top: 1px dashed var(--tx3); pointer-events: none; }
+.risk-history-bar { position: relative; flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
+.risk-history-bar[data-latest] { margin-left: 4px; outline: 1px solid var(--tx); outline-offset: 1px; border-radius: 2px; }
+.risk-history-fill { display: block; width: 100%; border-radius: 2px 2px 0 0; background: var(--fire-3); }
+.risk-history-bar[data-where="above"] .risk-history-fill { background: var(--fire-6); }
+.risk-history-bar[data-where="below"] .risk-history-fill { background: var(--tx3); }
+.risk-history-axis { display: flex; gap: 8px; margin-top: 2px; color: var(--tx3); font-size: 10px; line-height: 1.3; }
+.risk-history-axis > :nth-child(2) { flex: 1; text-align: center; color: var(--tx2); }
+.risk-history-key::before { content: ""; display: inline-block; width: 10px; height: 7px; margin-right: 3px; vertical-align: -1px;
+  background: color-mix(in srgb, var(--tx) 9%, transparent); border-top: 1px dashed var(--tx3); }
 .risk-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; height: 74px; margin: 10px 0 8px; }
 .risk-month-bar { position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 0 16px; border: 1px solid transparent;
   border-radius: 4px; background: var(--s1); cursor: pointer; min-height: 0; }
@@ -355,3 +379,63 @@ dialog::backdrop { background: rgba(7, 23, 63, .6); }
 .risk-impact-badge[hidden] { display: none; }
 .risk-intro { margin: 2px 0 4px; } .risk-also { margin: 0 0 4px; text-align: center; } .risk-also[hidden] { display: none; }
 .risk-year-title { margin: 12px 0 0; font-size: 13px; }
+
+/* --- Caso de muestra: video de bienvenida y recorrido por Sicuani (driver.js) ------------------------------ */
+.tour-btn { gap: 6px; }
+.tour-btn svg { width: 14px; height: 14px; flex: none; fill: var(--neon-yellow); }
+/* driver.css trae popovers blancos: aquí toman los colores, la letra y los botones del tema. */
+.driver-popover.nasat-tour { min-width: 0; max-width: min(340px, calc(100vw - 32px)); padding: 14px 16px 12px; border: 1px solid var(--bd); border-radius: 12px;
+  background: var(--s2); color: var(--tx); font-family: var(--font-body); box-shadow: 0 12px 32px rgba(7, 23, 63, .35); }
+.nasat-tour .driver-popover-title { padding-right: 26px; font: 700 16px/1.3 var(--font-head); }
+.nasat-tour .driver-popover-description { font-size: 13px; line-height: 1.5; }
+.nasat-tour .driver-popover-description p + p { margin-top: 8px; }
+.nasat-tour .driver-popover-description a { color: var(--acc); }
+.nasat-tour .driver-popover-close-btn { width: 36px; height: 36px; font-size: 20px; color: var(--tx2); }
+.nasat-tour .driver-popover-close-btn:hover, .nasat-tour .driver-popover-close-btn:focus-visible { color: var(--tx); }
+.nasat-tour .driver-popover-footer { gap: 8px; margin-top: 12px; }
+.nasat-tour .driver-popover-progress-text { color: var(--tx2); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nasat-tour .driver-popover-navigation-btns { gap: 6px; flex-wrap: wrap; }
+.nasat-tour .driver-popover-navigation-btns button + button { margin-inline-start: 0; }
+.nasat-tour .driver-popover-footer-btn { height: 32px; padding: 0 12px; border: 1px solid var(--bd2); border-radius: var(--r); background: var(--s2); color: var(--tx);
+  font: 13px/30px var(--font-body); text-shadow: none; }
+.nasat-tour .driver-popover-footer-btn:hover, .nasat-tour .driver-popover-footer-btn:focus-visible { background: var(--s1); }
+.nasat-tour .driver-popover-next-btn, .nasat-tour .driver-popover-next-btn:hover, .nasat-tour .driver-popover-next-btn:focus-visible {
+  border-color: var(--accbg); background: var(--accbg); color: var(--on-acc); font-weight: 700; }
+.nasat-tour .driver-popover-footer-btn:disabled { opacity: .5; cursor: default; }
+.nasat-tour .tour-skip, .nasat-tour .tour-skip:hover, .nasat-tour .tour-skip:focus-visible { border-color: transparent; background: transparent; color: var(--acc); }
+/* Lo que señala cada paso: un filo amarillo (Neon Yellow) que se ve en los dos temas. */
+.driver-active .driver-active-element { outline: 2px solid var(--neon-yellow); outline-offset: 3px; }
+.nasat-tour :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.nasat-tour .driver-popover-arrow-side-left { border-left-color: var(--s2); }
+.nasat-tour .driver-popover-arrow-side-right { border-right-color: var(--s2); }
+.nasat-tour .driver-popover-arrow-side-top { border-top-color: var(--s2); }
+.nasat-tour .driver-popover-arrow-side-bottom { border-bottom-color: var(--s2); }
+/* Bienvenida: más ancha, con la portada del video; YouTube solo carga al pulsarla. */
+.driver-popover.nasat-tour.tour-welcome { width: min(560px, calc(100vw - 32px)); max-width: none; }
+.tour-video { position: relative; aspect-ratio: 16 / 9; margin: 2px 0 10px; border-radius: var(--r); overflow: hidden; background: var(--deep-blue); }
+.tour-video iframe, .tour-video img { display: block; width: 100%; height: 100%; border: 0; object-fit: cover; }
+.tour-video-play { all: unset; position: relative; display: block; width: 100%; height: 100%; cursor: pointer; }
+.tour-video-play:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.tour-video-icon { position: absolute; left: 50%; top: 50%; width: 68px; height: 68px; margin: -34px 0 0 -34px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(7, 23, 63, .78); box-shadow: 0 0 0 3px var(--neon-yellow); transition: transform .15s ease; }
+.tour-video-icon svg { width: 30px; height: 30px; margin-left: 4px; fill: var(--white); }
+.tour-video-play:hover .tour-video-icon, .tour-video-play:focus-visible .tour-video-icon { transform: scale(1.08); }
+.tour-video-time { position: absolute; right: 8px; bottom: 8px; padding: 1px 6px; border-radius: 4px; background: rgba(7, 23, 63, .78); color: var(--white);
+  font-size: 12px; font-variant-numeric: tabular-nums; }
+.nasat-tour .tour-credit { margin-top: 8px; font-size: 11px; line-height: 1.35; color: var(--tx2); }
+/* Idioma del video y del recorrido, pegado debajo del video: el texto va en el otro idioma. */
+.nasat-tour .tour-lang-row { margin: -6px 0 8px; text-align: right; }
+.nasat-tour .tour-lang { padding: 2px 0; border: 0; background: transparent; color: var(--acc); font: 600 12px/1.4 var(--font-body);
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.nasat-tour .tour-lang:hover { color: var(--tx); }
+/* El mapa ocupa casi toda la pantalla y no deja sitio a su lado: en escritorio el popover va dentro, abajo a la derecha. */
+@media (min-width: 1024px) {
+  .driver-popover.nasat-tour.tour-in-map { top: auto !important; left: auto !important; right: var(--tour-right, 24px) !important; bottom: var(--tour-bottom, 40px) !important; }
+  .tour-in-map .driver-popover-arrow { display: none; }
+}
+/* Bienvenida del recorrido: los datos de NASA siguen llegando. El punto es del color de los focos en el mapa. */
+.nasat-tour .tour-live { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 12px; font-weight: 700; color: var(--tx2); }
+.tour-live-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--map-point); box-shadow: 0 0 0 0 var(--map-point);
+  animation: tour-live 2s ease-out infinite; }
+@keyframes tour-live { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--map-point) 60%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
+@media (prefers-reduced-motion: reduce) { .tour-live-dot { animation: none; } }

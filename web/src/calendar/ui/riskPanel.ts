@@ -3,7 +3,7 @@ import { byId, el } from '../../shared/dom';
 import { fmt } from '../../shared/format';
 import { lang, locale, t, type Key } from '../../shared/i18n';
 import { RAMP, RAMP_INK } from '../../shared/palette';
-import type { AreaForecast, BurnCalendar, Forecast, RiskLevel } from '../domain/types';
+import type { AreaForecast, BurnCalendar, Forecast, MonthForecast, RiskLevel } from '../domain/types';
 
 /**
  * Alerta temprana: predicción de fuego por mes. Los eventos esperados (λ) salen de un Poisson sobre los eventos
@@ -21,7 +21,8 @@ export function monthName(month: number): string {
   return lang() === 'es' ? name.toLocaleLowerCase('es') : name;
 }
 
-export const percent = (p: number): string => `${Math.round(p * 100)} %`;
+/** "48 %" con espacio que no se parte: el número y el signo van siempre en la misma línea. */
+export const percent = (p: number): string => `${Math.round(p * 100)}\u00a0%`;
 
 /** "diciembre de 2027" / "December 2027": el mes con el año que se predice, dentro de una frase. */
 export const monthOfYear = (month: number, year: number): string => t('risk.when', { month: monthName(month), year });
@@ -33,6 +34,23 @@ const capitalize = (text: string): string => text.charAt(0).toLocaleUpperCase(lo
  * que aun así pueda haber fuego lo dice la probabilidad de al menos uno, que va al lado.
  */
 export const events = (lambda: number): string => fmt(Math.round(lambda));
+
+/**
+ * Un solo evento puede darse en cualquier parte. Si el rango del 80 % incluye el cero (puede no haber fuego), lo que
+ * informa es la probabilidad de que haya y cuántos eventos serían si lo hay; "1 evento esperado" diría poco y, en los
+ * distritos, más de la mitad de esos meses no tuvo ninguno (2021–2025). Si el rango no incluye el cero, habrá fuego
+ * casi seguro: entonces sí, cuántos eventos.
+ */
+export const countIsTheNews = (low: number): boolean => low >= 1;
+
+/** Lo que se dice de un mes en las ventanas y la lista: eventos esperados si habrá fuego, si no, su probabilidad. */
+export const forecastTip = (lambda: number, p: number, low: number): string =>
+  countIsTheNews(low) ? t('risk.tip', { e: events(lambda), p: percent(p) }) : t('risk.tip.maybe', { p: percent(p) });
+
+/** "1 evento", "3 eventos" o "de 1 a 2 eventos". */
+function countRange(a: number, b: number): string {
+  return a === b ? `${fmt(a)} ${t(a === 1 ? 'risk.event.one' : 'risk.event.many')}` : t('risk.count.range', { a: fmt(a), b: fmt(b) });
+}
 
 /** Unidades del nivel del mapa que caen dentro del área elegida (un distrito se ve entre los de su provincia). */
 export function unitsWithin(fc: Forecast, area: AreaOfInterest): ForecastUnit[] {
@@ -95,6 +113,37 @@ function lastObserved(calendar: BurnCalendar | null, month: number): { year: num
   return point && point.eventsModis !== null ? { year: point.year, events: point.eventsModis } : null;
 }
 
+/**
+ * La historia detrás de la cifra: los eventos de ese mes en cada año del ajuste y, aparte y con contorno, el último
+ * año, que no se usó para ajustar. La franja es el rango del 80 %: se ve cuántos años cayeron dentro sin leer cifras.
+ */
+function renderHistory(point: MonthForecast, from: number, observed: { year: number; events: number } | null, month: number): void {
+  const years = point.history.map((n, i) => ({ year: from + i, n, latest: false }));
+  const lastFitted = from + point.history.length - 1;
+  if (observed && observed.year > lastFitted) years.push({ year: observed.year, n: observed.events, latest: true });
+  if (!years.length) return;
+  // Un poco de aire sobre la franja, para que se vea dónde termina el rango.
+  const top = Math.max(point.high * 1.25, ...years.map((y) => y.n), 1);
+  const share = (n: number): string => `${Math.min((n / top) * 100, 100).toFixed(1)}%`;
+  const name = capitalize(monthName(month));
+  byId('riskHistoryBars').replaceChildren(
+    el('span', { className: 'risk-history-band', style: `bottom:${share(point.low)};height:${share(point.high - point.low)}` }),
+    ...years.map((y) => {
+      const bar = el('span', { className: 'risk-history-bar', title: `${name} ${y.year}: ${fmt(y.n)} ${t(y.n === 1 ? 'risk.event.one' : 'risk.event.many')}` });
+      bar.dataset.where = y.n < point.low ? 'below' : y.n > point.high ? 'above' : 'within';
+      if (y.latest) bar.dataset.latest = '';
+      bar.append(el('span', { className: 'risk-history-fill', style: `height:${y.n ? share(y.n) : '0'}` }));
+      return bar;
+    }),
+  );
+  const first = years[0]!.year;
+  const last = years.at(-1)!.year;
+  byId('riskHistoryFrom').textContent = String(first);
+  byId('riskHistoryTo').textContent = String(last);
+  byId('riskHistoryLabel').textContent = t('risk.history', { month: name });
+  byId('riskHistory').setAttribute('aria-label', t('risk.history.aria', { month: name, a: first, b: last }));
+}
+
 export interface RiskHandlers {
   onMonth: (month: number) => void;
   onPick: (unit: ForecastUnit) => void;
@@ -138,20 +187,26 @@ export function renderRiskCard(
     impactBadge.textContent = t(`risk.impact.${impact}` as Key);
     impactBadge.style.cssText = `background:${RAMP[impactStep(impact)]!};color:${RAMP_INK[impactStep(impact)]!}`;
   }
-  // La cifra grande es la que más informa: los eventos esperados si son al menos uno; si redondean a 0, la
-  // probabilidad de que haya alguno.
-  const rare = !!point && Math.round(point.expected) === 0;
-  byId('riskExpected').textContent = !point ? '–' : rare ? percent(point.pAny) : events(point.expected);
-  byId('riskExpectedLabel').textContent = t(rare ? 'risk.any.long' : 'risk.expected');
-  byId('riskSecondLabel').textContent = t(rare ? 'risk.expected.short' : 'risk.any');
-  byId('riskSecond').title = t(rare ? 'risk.expected.tip' : 'risk.any.tip');
-  // Una frase que se lee sola: lo esperado y lo que pasa 8 de cada 10 años.
-  const summaryKey: Key = !point ? 'risk.summary' : point.expected === 0 || point.pAny < 0.05 ? 'risk.summary.none' : rare ? 'risk.summary.rare' : 'risk.summary';
-  byId('riskSummary').textContent = point
-    ? t(summaryKey, { when: whenText, area: areaLabel(area), e: events(point.expected), lo: fmt(point.low), hi: fmt(point.high), p: percent(point.pAny) })
-    : '';
+  // La cifra grande es la que más informa (ver `countIsTheNews`): los eventos esperados si habrá fuego casi seguro;
+  // si puede no haberlo, la probabilidad de que haya.
+  const counted = !!point && countIsTheNews(point.low);
+  byId('riskExpected').textContent = !point ? '–' : counted ? events(point.expected) : percent(point.pAny);
+  byId('riskExpectedLabel').textContent = t(counted ? 'risk.expected' : 'risk.any.long');
+  const from = areaFc?.years.from ?? 0;
+  byId('riskSummary').textContent = !point
+    ? ''
+    : level === 'none'
+      ? t('risk.summary.none', { when: whenText, area: areaLabel(area) })
+      : counted
+        ? t('risk.summary', {
+          when: whenText, area: areaLabel(area), e: events(point.expected), lo: fmt(point.low), hi: fmt(point.high), k: point.inRange, n: point.years, from,
+        })
+        : t('risk.summary.maybe', { when: whenText, area: areaLabel(area), n: countRange(point.ifAny[0], point.ifAny[1]) });
   // Contraste con la realidad: el último mes igual que ya terminó, dentro o fuera del rango esperado.
   const observed = point ? lastObserved(calendar, month) : null;
+  const historyBox = byId('riskHistory');
+  historyBox.hidden = !point;
+  if (point) renderHistory(point, from, observed, month);
   const lastLine = byId('riskLast');
   lastLine.hidden = !observed;
   if (observed && point) {
@@ -161,9 +216,14 @@ export function renderRiskCard(
       month: monthName(month), year: observed.year, n: fmt(observed.events), ev: t(observed.events === 1 ? 'risk.event.one' : 'risk.event.many'),
     });
   }
-  byId('riskAny').textContent = !point ? '–' : rare ? events(point.expected) : percent(point.pAny);
-  byId('riskRange').textContent = point ? `${fmt(point.low)}–${fmt(point.high)}` : '–';
+  byId('riskRange').textContent = !point ? '–' : point.low === point.high ? fmt(point.low) : `${fmt(point.low)}–${fmt(point.high)}`;
   byId('riskHits').textContent = point ? `${point.yearsWithEvents}/${point.years}` : '–';
+  // La misma prueba fuera de muestra del modelo, hecha solo en esta área: cuántos meses cayeron en el rango.
+  const tested = areaFc?.check;
+  byId('riskTestedValue').textContent = tested ? `${tested.inside}/${tested.cases}` : '–';
+  byId('riskTested').title = tested
+    ? t('risk.tested.tip', { a: tested.train[0], b: tested.train[1], c: tested.test[0], d: tested.test[1], k: tested.inside, n: tested.cases })
+    : '';
 
   // El año entero de un vistazo: total esperado, el mes más activo y el más tranquilo.
   byId('riskYearTitle').textContent = t('risk.year.title', { year });
@@ -181,7 +241,7 @@ export function renderRiskCard(
   const top = Math.max(peak, 1e-9);
   byId('riskMonths').replaceChildren(
     ...(areaFc?.months ?? []).map((m) => {
-      const tip = `${capitalize(monthOfYear(m.month, year))} · ${t(`risk.prob.${probabilityLevel(m.pAny)}` as Key)} · ${t('risk.tip', { e: events(m.expected), p: percent(m.pAny) })}`;
+      const tip = `${capitalize(monthOfYear(m.month, year))} · ${t(`risk.prob.${probabilityLevel(m.pAny)}` as Key)} · ${forecastTip(m.expected, m.pAny, m.low)}`;
       const button = el('button', { type: 'button', className: 'risk-month-bar', title: tip });
       button.setAttribute('aria-pressed', String(m.month === month));
       button.dataset.level = probabilityLevel(m.pAny);
@@ -202,7 +262,15 @@ export function renderRiskCard(
   if (fc && units.length >= 2) {
     byId('riskTopTitle').textContent = t('risk.top', { level: t(LEVEL_KEY[fc.level]), when: whenText });
     const i = month - 1;
-    const top = [...units].sort((a, b) => b.expected[i]! - a.expected[i]! || b.pAny[i]! - a.pAny[i]! || a.name.localeCompare(b.name, 'es')).slice(0, TOP);
+    // Primero donde habrá fuego casi seguro, por eventos esperados; después, donde puede haberlo, por probabilidad:
+    // es lo que muestra cada fila (la píldora de eventos o el porcentaje).
+    const counted = (u: ForecastUnit): boolean => countIsTheNews(u.low[i]!);
+    const top = [...units].sort((a, b) =>
+      Number(counted(b)) - Number(counted(a))
+      || (counted(a) ? b.expected[i]! - a.expected[i]! : 0)
+      || b.pAny[i]! - a.pAny[i]!
+      || b.expected[i]! - a.expected[i]!
+      || a.name.localeCompare(b.name, 'es')).slice(0, TOP);
     // En todo el Perú hace falta la jerarquía (departamento › provincia); dentro de un área ya está en el encabezado.
     const showParent = area.kind === 'country' || area.kind === 'bbox' || area.kind === 'polygon';
     byId('riskTop').replaceChildren(
@@ -213,28 +281,36 @@ export function renderRiskCard(
         const step = impact ? impactStep(impact) : null;
         const go = el('button', { type: 'button', className: 'link', textContent: u.name });
         go.addEventListener('click', () => handlers.onPick(u));
-        return el('li', {},
+        const title = `${impact ? `${t(`risk.impact.${impact}` as Key)} · ` : ''}${t(`risk.prob.${probabilityLevel(p)}` as Key)} · ${forecastTip(lambda, p, u.low[i]!)}`;
+        // La píldora cuenta eventos solo si habrá fuego casi seguro; si puede no haberlo, basta la probabilidad.
+        return el('li', { title },
           go,
           el('span', { className: 'muted small', textContent: showParent && u.parent ? ` · ${u.parent}` : '' }),
-          el('span', { className: 'muted small risk-any', textContent: percent(p) }),
-          el('b', {
-            className: 'risk-pill',
-            title: `${impact ? `${t(`risk.impact.${impact}` as Key)} · ` : ''}${t(`risk.prob.${probabilityLevel(p)}` as Key)} · ${t('risk.tip', { e: events(lambda), p: percent(p) })}`,
-            textContent: t('risk.top.events', { e: events(lambda) }),
-            style: step === null ? '' : `background:${RAMP[step]!};color:${RAMP_INK[step]!}`,
-          }),
+          el('span', { className: countIsTheNews(u.low[i]!) ? 'muted small risk-any' : 'small risk-any', textContent: percent(p) }),
+          countIsTheNews(u.low[i]!)
+            ? el('b', { className: 'risk-pill', textContent: t('risk.top.events', { e: events(lambda) }), style: step === null ? '' : `background:${RAMP[step]!};color:${RAMP_INK[step]!}` })
+            : '',
         );
       }),
     );
   }
 
+  // ¿Es confiable? La prueba fuera de muestra del nivel del mapa y, para la franja de la etiqueta, cuántas veces hubo
+  // fuego cuando el modelo dijo esa probabilidad: así se ve que "casi nula" no es "puede pasar en cualquier parte".
   const check = fc?.check;
+  const band = check?.bands.find((b) => b.from === PROBABILITY_LEVELS.find((l) => l.level === level)!.from);
+  const nearZero = check?.bands.find((b) => b.from === 0);
   byId('riskCheck').textContent = check
-    ? t('risk.check', {
-      level: t(LEVEL_KEY[fc!.level]).toLowerCase(), a: check.train[0], b: check.train[1], c: check.test[0], d: check.test[1],
-      skill: Math.round(check.skill * 100), cov: Math.round(check.coverage * 100), pcov: Math.round(check.poissonCoverage * 100),
-      disp: check.dispersion.toFixed(1).replace('.', lang() === 'es' ? ',' : '.'),
-    })
+    ? [
+      t('risk.check', { a: check.train[0], b: check.train[1], c: check.test[0], d: check.test[1] }),
+      band
+        ? t(nearZero && level !== 'none' ? 'risk.check.band' : 'risk.check.band.alone', {
+          level: t(LEVEL_KEY[fc!.level]).toLowerCase(), band: t(`risk.prob.${level}` as Key).toLowerCase(), obs: percent(band.observed),
+          zero: t('risk.prob.none').toLowerCase(), none: percent(nearZero?.observed ?? 0),
+        })
+        : '',
+      t('risk.check.rest', { cov: Math.round(check.coverage * 100), skill: Math.round(check.skill * 100) }),
+    ].filter(Boolean).join(' ')
     : '';
 }
 

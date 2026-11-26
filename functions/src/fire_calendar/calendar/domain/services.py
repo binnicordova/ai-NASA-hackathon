@@ -10,14 +10,17 @@ from fire_calendar.shared.kernel import DateRange, YearMonth
 from .model import (
     FORECAST_RANGE,
     MIN_YEARS_FOR_ANOMALY,
+    PROBABILITY_BANDS,
     VIIRS_START_YEAR,
     ActivityLevels,
     Anomaly,
     AnomalyCategory,
+    BandCheck,
     HarmonizedSeries,
     HistoricalMedian,
     MonthFrequency,
     MonthForecast,
+    MonthOutlook,
     PeakSeason,
     ForecastCheck,
     RangeSummary,
@@ -200,13 +203,30 @@ def _gamma_poisson_pmf(lam: float, r: float):
         k += 1
 
 
-def _quantile(pmf, q: float) -> int:
+def _quantile(pmf, q: float, p_any: float | None = None) -> int:
+    """Percentil q de la distribución; con `p_any`, el de los eventos si hay al menos uno (sin el cero)."""
     total = 0.0
     for k, term in pmf:
+        if p_any is not None:
+            if k == 0:
+                continue
+            term /= p_any
         total += term
         if total >= q - 1e-12 or k > 100_000:
             return k
     return 0  # pragma: no cover
+
+
+def _fit(counts: Sequence[int]) -> tuple[float, float | None]:
+    """λ y, si los años varían más de lo que admite un Poisson (varianza > media), la forma r de la Poisson-Gamma."""
+    n = len(counts)
+    lam = sum(counts) / n if n else 0.0
+    var = sum((c - lam) ** 2 for c in counts) / (n - 1) if n > 1 else 0.0
+    return lam, (lam * lam / (var - lam) if lam and var > lam * 1.05 else None)
+
+
+def _pmf(lam: float, r: float | None):
+    return _poisson_pmf(lam) if r is None else _gamma_poisson_pmf(lam, r)
 
 
 def month_forecast(counts: Sequence[int], month: int) -> MonthForecast:
@@ -216,26 +236,45 @@ def month_forecast(counts: Sequence[int], month: int) -> MonthForecast:
     rango salen de un Poisson-Gamma con la misma media: así el rango no promete una precisión que los datos no dan.
     """
     n = len(counts)
-    lam = sum(counts) / n if n else 0.0
-    var = sum((c - lam) ** 2 for c in counts) / (n - 1) if n > 1 else 0.0
+    lam, r = _fit(counts)
     hits = sum(1 for c in counts if c > 0)
     if lam == 0:
         return MonthForecast(month, 0.0, 0.0, 0, 0, n, hits, False)
-    overdispersed = var > lam * 1.05
-    if overdispersed:
-        r = lam * lam / (var - lam)
-        p_any = 1 - (r / (r + lam)) ** r
-        low = _quantile(_gamma_poisson_pmf(lam, r), FORECAST_RANGE[0])
-        high = _quantile(_gamma_poisson_pmf(lam, r), FORECAST_RANGE[1])
-    else:
-        p_any = 1 - math.exp(-lam)
-        low = _quantile(_poisson_pmf(lam), FORECAST_RANGE[0])
-        high = _quantile(_poisson_pmf(lam), FORECAST_RANGE[1])
-    return MonthForecast(month, lam, p_any, low, high, n, hits, overdispersed)
+    p_any = 1 - next(_pmf(lam, r))[1]
+    low = _quantile(_pmf(lam, r), FORECAST_RANGE[0])
+    high = _quantile(_pmf(lam, r), FORECAST_RANGE[1])
+    return MonthForecast(month, lam, p_any, low, high, n, hits, r is not None)
 
 
 def forecast_months(counts: Mapping[tuple[int, int], int], years: Sequence[int]) -> tuple[MonthForecast, ...]:
     return tuple(month_forecast([counts.get((y, m), 0) for y in years], m) for m in range(1, 13))
+
+
+def month_outlook(counts: Sequence[int], month: int) -> MonthOutlook:
+    """La predicción de un mes con su historia: cuántos años cayeron en el rango y cuántos eventos hay si hay fuego."""
+    f = month_forecast(counts, month)
+    in_range = sum(1 for c in counts if f.low <= c <= f.high)
+    if f.p_any <= 0:
+        return MonthOutlook(f, tuple(counts), in_range, (0, 0))
+    lam, r = _fit(counts)
+    if_any = (_quantile(_pmf(lam, r), FORECAST_RANGE[0], f.p_any), _quantile(_pmf(lam, r), FORECAST_RANGE[1], f.p_any))
+    return MonthOutlook(f, tuple(counts), in_range, if_any)
+
+
+def area_outlook(counts: Mapping[tuple[int, int], int], years: Sequence[int]) -> tuple[MonthOutlook, ...]:
+    return tuple(month_outlook([counts.get((y, m), 0) for y in years], m) for m in range(1, 13))
+
+
+def _band_checks(pairs: Sequence[tuple[float, int]]) -> tuple[BandCheck, ...]:
+    """Calibración: para cada franja de probabilidad, lo que dijo el modelo y lo que pasó de verdad."""
+    bands: list[BandCheck] = []
+    ceiling = math.inf
+    for floor in PROBABILITY_BANDS:
+        inside = [(p, o) for p, o in pairs if floor <= p < ceiling]
+        if inside:
+            bands.append(BandCheck(floor, len(inside), sum(p for p, _ in inside) / len(inside), sum(o for _, o in inside) / len(inside)))
+        ceiling = floor
+    return tuple(bands)
 
 
 def forecast_check(
@@ -269,5 +308,5 @@ def forecast_check(
     reference = sum((base - o) ** 2 for _, o in pairs) / len(pairs)
     return ForecastCheck(
         train, test, len(pairs), brier, reference, inside / len(pairs), poisson_inside / len(pairs),
-        quantile(dispersion, 0.5) if dispersion else 1.0,
+        quantile(dispersion, 0.5) if dispersion else 1.0, _band_checks(pairs),
     )

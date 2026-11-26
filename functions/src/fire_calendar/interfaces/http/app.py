@@ -182,8 +182,7 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | ReloadingGateway | None 
     def area_forecast(department: str | None = department_q, bbox: str | None = bbox_q,
               district: str | None = district_q, polygon: str | None = polygon_q, province: str | None = province_q) -> dict:
         area = area_from(department, bbox, district, polygon, province)
-        years, months = get_forecast.for_area(area)
-        return presenters.area_forecast_json(area, years, months)
+        return presenters.area_forecast_json(area, get_forecast.for_area(area))
 
     @app.get("/api/v1/shapes")
     def shapes(level: str = level_q) -> JSONResponse:

@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "driver.js": "1.12.1",
     "leaflet": "^1.9.4"
   },
   "devDependencies": {

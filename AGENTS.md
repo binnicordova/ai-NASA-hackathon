@@ -112,7 +112,7 @@ La base de `data/processed/` llega hasta el día anterior al corte de `base_mani
   - `meta`, `limits` (departamentos, provincias y distritos), `boundary` (contorno de un área oficial), `shapes?level=` (contornos de todo un nivel).
   - `calendar`, `anomaly` (sin `month` = mes en curso), `daily` (serie diaria densa), `cells` (hexágonos del rango), `ranking` (hexágonos, focos y eventos por departamento).
   - `points`: focos crudos, los más recientes primero (tope 30 000 en la web, 50 000 en la API), con `summary` de todos y `events` del recuento diario.
-  - `forecast?level=department|province|district`: predicción por mes de cada límite (`expected`, `pAny`, `low`, `high`) y `check` fuera de muestra. `forecast/area`: la del área elegida.
+  - `forecast?level=department|province|district`: predicción por mes de cada límite (`expected`, `pAny`, `low`, `high`) y `check` fuera de muestra, con `bands` (calibración: por franja de probabilidad, lo que dijo y lo que pasó). `forecast/area`: la del área elegida, con `history` (eventos de ese mes, año por año, 2003–año pasado), `inRange`, `ifAny` (rango del 80 % si hay fuego) y su propio `check` hecho solo en esa área.
   - `hotspots.csv`, `export.csv`, `calendar.csv`.
 - El contrato está en `docs/06-arquitectura-ddd.md` y en `/api/docs`. Las cifras de `functions/tests/test_api.py` salen de los datos reales: si cambias el ETL, revisa esas cifras.
 
@@ -147,8 +147,15 @@ Común a las tres:
   - **Probabilidad** de al menos un evento: alta ≥ 67 %, media ≥ 33 %, baja ≥ 5 %, casi nula < 5 %. Etiqueta de la tarjeta y color de las barras.
   - **Impacto** = eventos esperados redondeados: bajo 0–20, medio 21–50, alto 51–100, crítico > 100. Color del mapa y de la lista; sin color si la probabilidad es casi nula.
 - El mapa baja un nivel desde el área del filtro global: Perú → departamentos, departamento → provincias, provincia → distritos; un distrito se ve entre los de su provincia. Clic en un límite lo elige como área.
-- Tarjeta: eventos esperados en enteros (nunca "< 1"; si redondean a 0, la cifra grande pasa a ser la probabilidad), una frase en lenguaje llano, el mismo mes del último año completo frente al rango, KPIs (probabilidad o eventos, rango 80 %, años con fuego), 12 barras del año, top 5 por impacto y "¿Es confiable?" con la prueba fuera de muestra.
+- Tarjeta: la cifra grande depende del rango del 80 % (`countIsTheNews` en `riskPanel.ts`). Si incluye el cero (puede no haber fuego), va la **probabilidad de fuego** y la frase dice cuántos eventos serían si lo hay (`ifAny`); nunca "1 evento esperado": un evento puede darse en cualquier parte, y en los distritos con 1 esperado no hubo ninguno el 57 % de las veces (2021–2025). Si no incluye el cero, van los **eventos esperados** en enteros y la frase dice cuántos años de la historia cayeron en el rango. Debajo, la historia del mes año por año con el rango como franja (el último año aparte, con contorno), el mismo mes del último año completo, KPIs (rango 80 %, años con fuego, **Probado aquí**: meses de 2021–2025 dentro del rango en esa área), 12 barras del año, top 5 (con píldora de eventos solo si habrá fuego casi seguro; si no, por probabilidad) y "¿Es confiable?" con la calibración de la franja de la etiqueta.
 - Oculta la línea de tiempo, las fechas, las descargas y el calendario.
+
+**Caso Sicuani** (video y recorrido de primera visita, `web/src/sample-case/`):
+
+- Botón "Caso Sicuani" en el encabezado (en el teléfono, solo el ▶ en la fila de los logos). Se abre solo en la primera visita a la portada (sin área ni fechas en el enlace), después del globo, y si la persona no eligió ya otra área o pestaña.
+- Bienvenida: el video de 30 s en YouTube, en el idioma de la interfaz (ES `xsZsKkPtBvs`, EN `dJ5Ccd7tOqI`; `hl` pone el reproductor en ese idioma). Debajo del video, "Watch in English" / "Ver en español" cambia la app, el video y el recorrido a la vez (el velo tapa el botón del encabezado); el recorrido vuelve a escribir el paso abierto en el idioma nuevo. La portada es local (`web/public/tour/`, con su crédito Copernicus); el reproductor `youtube-nocookie` carga solo al pulsarla.
+- Ocho pasos con driver.js: seis sobre el incendio de Sicuani (ubigeo 080601), del 3 al 7 de octubre de 2026 (el lugar, en la lista de riesgo muy alto del Plan Multisectorial 2025–2027; los días; focos crudos por sensor; antes y después de armonizar; el calendario; la Alerta temprana en su mes de más probabilidad), luego **lo más reciente en todo el Perú** (los dos últimos días de focos crudos, en el mapa) y el cierre en todo el Perú para elegir el distrito propio, con la oferta de un piloto antes de mayo. La historia va del pasado al presente: Sicuani ardió, y NASAT vigila lo último para que quien protege vidas lo vea el mismo día. "En vivo" (la línea de la bienvenida y el paso 7) solo aparece si `/api/v1/meta` trae `tail` (los datos que se refrescan solos, PR #16): nombra el satélite y la hora (de Perú) de la última detección, y dice que FIRMS se revisa cada 15 minutos con 2 a 6 horas de retraso. Sin `tail`, el paso dice solo hasta qué día llegan los datos. Siempre aclara que un foco no es un incendio confirmado; nunca promete avisos (no hay canal de alertas).
+- Cada paso lleva la app a su estado (área, fechas, pestaña) y escribe sus cifras con los datos ya cargados (`sample-case/domain/sicuani.ts`): ninguna cifra va escrita a mano, así coinciden con la pantalla aunque cambien los datos. El "3 contra 90" del video es Sicuani más San Pablo el 5 de octubre; el recorrido muestra solo Sicuani, del 3 al 7 (VIIRS 162, MODIS 12).
 
 Detalles de implementación que conviene saber:
 
@@ -156,7 +163,8 @@ Detalles de implementación que conviene saber:
 - Todo texto visible va en `shared/i18n.ts`, en español y en inglés (el tipo `Key` obliga a tener las dos). Textos breves y amables; en español, los meses van en minúscula dentro de las frases.
 - `calendar/domain/fireEvents.ts` agrupa eventos en el navegador con la **misma regla** que `fire_events.py`; si cambias una, cambia la otra.
 - Elementos que no aplican a una pestaña: CSS `.app.tab-risk .not-risk`, `.app.tab-raw .not-raw` y `data-risk` (lo único visible del panel en Alerta temprana).
-- URL: `department|province|district|bbox|polygon`, `from`, `to`, `metric=hotspots`, `points=1`, `buffers=overlap`, `view=risk`, `month=1..12`. En el navegador (no en el enlace): `nasat-theme`, `nasat-hidden-sections`, `fire-calendar-lang`, y `nasat-intro-seen` (sesión).
+- URL: `department|province|district|bbox|polygon`, `from`, `to`, `metric=hotspots`, `points=1`, `buffers=overlap`, `view=risk`, `month=1..12`. En el navegador (no en el enlace): `nasat-theme`, `nasat-hidden-sections`, `fire-calendar-lang`, `nasat-tour-seen` (el recorrido ya se abrió) y `nasat-intro-seen` (sesión).
+- driver.js va fijado en una versión exacta (1.12.1, sin `^`) y se carga aparte, solo al abrir el recorrido. Sus popovers toman los colores del tema en `styles.css` (`.nasat-tour`, velo `--tour-overlay`); en escritorio, el paso del mapa pone el popover dentro del mapa (`.tour-in-map`) porque a su lado no cabe.
 
 ## Decisiones tomadas (no revertir sin preguntar)
 
@@ -166,6 +174,8 @@ Detalles de implementación que conviene saber:
 - El encabezado y sus pestañas nunca se ocultan; "solo mapa" oculta el resto.
 - El ranking de departamentos no muestra actividad armonizada (compara departamentos dentro de un rango, no años).
 - **Predicción** (decisión del equipo, 15 nov 2026; antes "la web describe, no predice"): estacional y verificada, Poisson sobre eventos MODIS. No usa eventos con VIIRS (crecen con cada satélite) ni actividad armonizada con umbral, ni clima, ni tendencia. Se descartó el plan del documento del equipo (Theil-Sen a 12 meses y puntaje de riesgo 0–100) por no estar verificado.
+- **Cifra de la Alerta temprana** (pedido del equipo, 26 nov 2026: "un evento puede darse en cualquier parte"): si el rango del 80 % incluye el cero, la cifra grande es la probabilidad y se dice cuántos eventos si hay fuego; la tarjeta muestra la historia del mes, la prueba en el área y la calibración de la franja. El modelo no cambió.
+- **Caso Sicuani** (pedido del equipo, 26 nov 2026, después del cierre): video y recorrido de primera visita con driver.js. El recorrido nunca dice que NASAT predijo ese incendio: la Alerta temprana dice qué meses vigilar. El enlace del piloto ("escríbenos") apunta a la publicación de LinkedIn del 24 nov 2026, que ya pide a cada autoridad su distrito; cámbialo en `SICUANI.contact` si el equipo tiene un correo.
 
 ## Cómo pide trabajo el equipo
 
@@ -188,13 +198,13 @@ Detalles de implementación que conviene saber:
 
 ## Cómo trabajar
 
-- Pruebas: `cd functions && uv run python -m pytest -q` (38) y, para la cola, `uv run --with pytest --with pandas --with numpy --with scipy --with h3 --with pyarrow pytest src/etl/tests -q` (13). Web: `cd web && npx tsc --noEmit && npm run build && npm run check:palette`.
+- Pruebas: `cd functions && uv run python -m pytest -q` (42) y, para la cola, `uv run --with pytest --with pandas --with numpy --with scipy --with h3 --with pyarrow pytest src/etl/tests -q` (13). Web: `cd web && npx tsc --noEmit && npm run build && npm run check:palette`.
 - Servidores: `.claude/launch.json` (`fire-calendar` en :8000 y `web-dev` en :5173, que reenvía `/api` a :8000). Si :8000 está ocupado por otra copia del repositorio, añade una configuración temporal en otro puerto (p. ej. :8001, que también sirve `web/dist` compilado), o arranca Vite con `FUNCTIONS_URL=http://127.0.0.1:<puerto>`; deshaz el cambio de `launch.json` antes de confirmar.
 - La API no recarga sola: tras cambiar Python, reinicia el servidor. Tras cambiar `web/`, `npm run build` si la ves servida por la API.
 - Regenerar los límites: `uv run --project functions python src/etl/peru_limits.py` (~35 s). El WFS del INEI rechaza el agente por defecto de curl; el script se identifica como `NASAT-ETL/1.0` y usa los certificados de `certifi`.
 - Git: una rama por tarea desde `origin/main` y PR a `main`. Antes de empujar más commits a una rama con PR, comprueba que el PR siga abierto (`gh pr view <n>`): un commit empujado después de fusionar se queda fuera de `main` (pasó con el README de #9; se resolvió con #10).
 - **Despliegue automático**: `.github/workflows/deploy.yml` corre pruebas y tipos y despliega en Cloud Run al fusionar en `main` cambios en `functions/`, `web/`, `data/processed/`, `Dockerfile` o `.gcloudignore` (~2,5 min; `gh run list --workflow deploy.yml`). Cambios solo de docs no despliegan. Manual, si hiciera falta: el comando `gcloud run deploy` del README (siempre con `--project nasat-fire-calendar`; el proyecto activo de gcloud en esta máquina es otro).
-- Capturas del README (`docs/img/01…14`): se tomaron de producción con `puppeteer-core` sobre el Chrome instalado, a 1440×900, en español y tema oscuro (05 en claro), saltando la intro con `sessionStorage['nasat-intro-seen']`. El script no está en el repositorio: si cambias la interfaz de forma visible, rehazlas con las mismas vistas (lista en la tabla de criterios del README).
+- Capturas del README (`docs/img/01…14`): se tomaron de producción con `puppeteer-core` sobre el Chrome instalado, a 1440×900, en español y tema oscuro (05 en claro), saltando la intro con `sessionStorage['nasat-intro-seen']` (y, desde el caso Sicuani, el recorrido con `localStorage['nasat-tour-seen'] = '1'`). El script no está en el repositorio: si cambias la interfaz de forma visible, rehazlas con las mismas vistas (lista en la tabla de criterios del README).
 
 ## Cifras verificadas (úsalas tal cual en la demo y el envío)
 
@@ -202,6 +212,8 @@ Detalles de implementación que conviene saber:
 - Limpieza: 2 439 271 → 2 168 246 focos; los 150 000 de confianza baja están recontados en los CSV (la cifra redonda es real).
 - Con límites INEI: Cusco 2024 = 9 508 focos; 25 departamentos, 196 provincias, 1 890 distritos.
 - Predicción, prueba fuera de muestra (ajuste 2003–2020, prueba 2021–2025), departamento / provincia / distrito: error de Brier **48 / 43 / 33 %** menor que una sola tasa para todo el Perú; rango del 80 % cumplido **83 / 90 / 96 %**; con Poisson puro, 58 / 83 / 96 % (dispersión 4,5 / 2,4 / 1,8).
+- Calibración fuera de muestra (distritos, 2021–2025): cuando dijo alta, hubo fuego el **81 %** de las veces; media, **42 %**; baja, **12 %**; casi nula, **2 %** (provincias 87 / 53 / 21 / 5 %; departamentos 96 / 70 / 29 / 2 %).
+- Prueba en el área (ajuste 2003–2020, 60 meses de 2021–2025 dentro del rango): Sicuani **54/60**, Cusco 48/60, Perú 48/60. Sicuani, agosto: fuego en 11 de 23 años, 48 %, si lo hay de 1 a 2 eventos.
 - Ejemplos de la app: Cusco, agosto de 2027 → 141 eventos esperados (47–257); todo 2027 → ~428; Perú, septiembre → 3 198.
 
 ## Pendiente para el envío (revisar al empezar cada sesión)
