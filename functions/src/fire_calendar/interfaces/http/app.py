@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
@@ -26,6 +26,16 @@ from fire_calendar.calendar.application.use_cases import (
 )
 from fire_calendar.calendar.infrastructure.duckdb_gateway import DuckDbHarmonizedSeriesGateway
 from fire_calendar.calendar.infrastructure.tail_source import ReloadingGateway, TailSnapshot, TailSource
+from fire_calendar.district_sheet.application.use_cases import GetDistrictSheet
+from fire_calendar.district_sheet.interfaces.brand import brand_tokens
+from fire_calendar.district_sheet.application.places import COUNTRY, Places
+from fire_calendar.district_sheet.domain.model import DistrictName
+from fire_calendar.district_sheet.interfaces.map_page import map_page
+from fire_calendar.district_sheet.interfaces.page import sheet_page, template_from, template_index
+from fire_calendar.district_sheet.interfaces.preview import render_preview
+from fire_calendar.district_sheet.interfaces.seo import robots, sitemap
+from fire_calendar.district_sheet.interfaces.texts import lang_of
+from fire_calendar.district_sheet.interfaces.urls import district_path, map_path, slugify, slugs
 from fire_calendar.hotspots.application.export_csv import ExportActivityCsv, ExportHotspotsCsv, stream_csv
 from datetime import date
 
@@ -36,6 +46,8 @@ from . import presenters
 REPO_ROOT = Path(__file__).resolve().parents[5]
 DATA_DIR = Path(os.environ.get("FIRE_DATA_DIR", REPO_ROOT / "data" / "processed"))
 WEB_DIST = Path(os.environ.get("FIRE_WEB_DIST", REPO_ROOT / "web" / "dist"))
+# Origen público de las direcciones canónicas, el mapa del sitio y las vistas previas (en Cloud Run: https://nasat.space).
+PUBLIC_URL = os.environ.get("FIRE_PUBLIC_URL", "").strip() or None
 
 CAVEATS = [
     "A hot spot is a thermal detection, not a confirmed wildfire.",
@@ -78,6 +90,8 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | ReloadingGateway | None 
     get_daily = GetDailyActivity(gateway)
     get_points = GetHotspotPoints(gateway)
     get_forecast = GetFireForecast(gateway)
+    get_sheet = GetDistrictSheet(gateway, get_forecast)
+    places = Places(gateway)
     export_csv = ExportActivityCsv(gateway)
     export_hotspots = ExportHotspotsCsv(gateway)
 
@@ -182,8 +196,7 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | ReloadingGateway | None 
     def area_forecast(department: str | None = department_q, bbox: str | None = bbox_q,
               district: str | None = district_q, polygon: str | None = polygon_q, province: str | None = province_q) -> dict:
         area = area_from(department, bbox, district, polygon, province)
-        years, months = get_forecast.for_area(area)
-        return presenters.area_forecast_json(area, years, months)
+        return presenters.area_forecast_json(area, get_forecast.for_area(area))
 
     @app.get("/api/v1/shapes")
     def shapes(level: str = level_q) -> JSONResponse:
@@ -244,6 +257,111 @@ def create_app(gateway: DuckDbHarmonizedSeriesGateway | ReloadingGateway | None 
                start: str | None = from_q, end: str | None = to_q) -> StreamingResponse:
         area, days = area_from(department, bbox, district, polygon, province), days_from(start, end)
         return csv_response(export_csv(area, days), f"fire-activity_{area.kind}_{days}.csv")
+
+    # --- Ficha del distrito: dirección legible, atajo /d/<ubigeo>, vista previa, mapa del sitio ----------------
+
+    def public_base(request: Request) -> str:
+        """Origen público para direcciones canónicas: FIRE_PUBLIC_URL (https://nasat.space) o el de la petición."""
+        return (PUBLIC_URL or str(request.base_url)).rstrip("/")
+
+    def sheet_response(district: DistrictName | None, language: str, request: Request) -> Response:
+        if district is None:  # la misma página, que dice que no encontró el distrito y enlaza al mapa
+            return HTMLResponse(template_from(WEB_DIST), status_code=404)
+        sheet = get_sheet(district.ubigeo)
+        base = public_base(request)
+        # La fecha de los datos va en la imagen: cuando llegan datos nuevos, la vista previa cambia de dirección.
+        image_url = f"{base}/api/v1/preview/district/{district.ubigeo}.png?v={sheet.last_date}{'&lang=en' if language == 'en' else ''}"
+        body = sheet_page(template_from(WEB_DIST), sheet, language, base, get_sheet.siblings(district), image_url)
+        return HTMLResponse(body, headers={"Cache-Control": "public, max-age=600"})
+
+    def by_slugs(department: str, province: str, district: str) -> DistrictName | None:
+        wanted = (slugify(department), slugify(province), slugify(district))
+        return next((d for d in get_sheet.districts() if slugs(d) == wanted), None)
+
+    def sheet_by_path(department: str, province: str, district: str, request: Request, language: str) -> Response:
+        found = by_slugs(department, province, district)
+        canonical = district_path(found, language) if found else None
+        # Mayúsculas, tildes o espacios en la dirección: se redirige a la forma canónica (una sola dirección por ficha).
+        if canonical and request.url.path != canonical:
+            return RedirectResponse(canonical, status_code=301)
+        return sheet_response(found, language, request)
+
+    @app.get("/incendios/{department}/{province}/{district}", include_in_schema=False)
+    def district_page_es(department: str, province: str, district: str, request: Request) -> Response:
+        """Ficha imprimible del distrito, en español, con su HTML para buscadores y vistas previas."""
+        return sheet_by_path(department, province, district, request, "es")
+
+    @app.get("/en/wildfires/{department}/{province}/{district}", include_in_schema=False)
+    def district_page_en(department: str, province: str, district: str, request: Request) -> Response:
+        return sheet_by_path(department, province, district, request, "en")
+
+    @app.get("/d/{ubigeo}", include_in_schema=False)
+    def district_shortcut(ubigeo: str, lang: str | None = None) -> Response:
+        """Atajo por ubigeo (enlaces ya compartidos): redirige para siempre a la dirección legible."""
+        try:
+            district = get_sheet.district(ubigeo)
+        except LookupError:
+            return HTMLResponse(template_from(WEB_DIST), status_code=404)
+        return RedirectResponse(district_path(district, lang_of(lang)), status_code=301)
+
+    @app.get("/api/v1/preview/district/{ubigeo}.png")
+    def district_preview(ubigeo: str, request: Request, lang: str | None = None) -> Response:
+        """Imagen de 1200 × 630 de la ficha: nombre, meses a vigilar y calendario año × mes."""
+        language = lang_of(lang)
+        try:
+            sheet = get_sheet(ubigeo)
+        except LookupError:
+            return JSONResponse({"error": f"Distrito desconocido: {ubigeo}"}, status_code=404)
+        host = public_base(request).split("://", 1)[-1]
+        png = render_preview(sheet, brand_tokens(REPO_ROOT, WEB_DIST), language, host + district_path(sheet.district, language))
+        return Response(png, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
+
+    # --- Mapa de cada área oficial: /mapa/cusco, /mapa/cusco/canchis, /mapa/cusco/canchis/sicuani (en inglés /en/map/…)
+
+    def map_response(parts: str, request: Request, language: str) -> Response:
+        pieces = tuple(p for p in parts.split("/") if p)
+        place = COUNTRY if not pieces else places.find(pieces) if len(pieces) <= 3 else None
+        template = template_index(WEB_DIST)
+        if place is None:  # la app abre en todo el Perú, con 404 para los buscadores
+            return HTMLResponse(template, status_code=404)
+        canonical = map_path(place.slugs, language)
+        # Mayúsculas, tildes o barra final: una sola dirección por área (las fechas y la pestaña se conservan).
+        if request.url.path != canonical:
+            query = f"?{request.url.query}" if request.url.query else ""
+            return RedirectResponse(canonical + query, status_code=301)
+        base = public_base(request)
+        facts = places.facts(place)
+        image = None
+        if place.kind == "district":
+            image = f"{base}/api/v1/preview/district/{place.key}.png?v={facts.last_date}{'&lang=en' if language == 'en' else ''}"
+        return HTMLResponse(map_page(template, place, facts, language, base, image), headers={"Cache-Control": "public, max-age=600"})
+
+    @app.get("/mapa", include_in_schema=False)
+    def map_es_root(request: Request) -> Response:
+        query = f"?{request.url.query}" if request.url.query else ""
+        return RedirectResponse("/" + query, status_code=301)
+
+    @app.get("/mapa/{parts:path}", include_in_schema=False)
+    def map_es(parts: str, request: Request) -> Response:
+        """La app en el área oficial de la dirección, con su título y su canónica para buscadores."""
+        return map_response(parts, request, "es")
+
+    @app.get("/en/map", include_in_schema=False)
+    def map_en_root(request: Request) -> Response:
+        return map_response("", request, "en")
+
+    @app.get("/en/map/{parts:path}", include_in_schema=False)
+    def map_en(parts: str, request: Request) -> Response:
+        return map_response(parts, request, "en")
+
+    @app.get("/sitemap.xml", include_in_schema=False)
+    def sitemap_xml(request: Request) -> Response:
+        body = sitemap(public_base(request), get_sheet.districts(), gateway.date_span()[1], places.all())
+        return Response(body, media_type="application/xml", headers={"Cache-Control": "public, max-age=3600"})
+
+    @app.get("/robots.txt", include_in_schema=False)
+    def robots_txt(request: Request) -> Response:
+        return Response(robots(public_base(request)), media_type="text/plain")
 
     if WEB_DIST.exists():  # un solo despliegue: la API sirve también la web compilada
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")

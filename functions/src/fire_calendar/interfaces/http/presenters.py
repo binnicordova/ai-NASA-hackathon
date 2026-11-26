@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fire_calendar.calendar.application.use_cases import BurnCalendar
-from fire_calendar.calendar.domain.model import FORECAST_RANGE, FORECAST_SENSOR, Anomaly, ForecastCheck, ForecastMap, MonthForecast
+from fire_calendar.calendar.domain.model import FORECAST_RANGE, FORECAST_SENSOR, Anomaly, AreaForecast, ForecastCheck, ForecastMap
 from fire_calendar.calendar.domain.ports import ActiveCell, DailyActivity, DepartmentTotal, HotspotSample
 from fire_calendar.shared.kernel import AreaOfInterest
 
@@ -177,7 +177,12 @@ def _check_json(check: ForecastCheck | None) -> dict | None:
         "train": list(check.train), "test": list(check.test), "cases": check.cases,
         "brier": round(check.brier, 4), "brierReference": round(check.brier_reference, 4), "skill": round(check.skill, 3),
         "coverage": round(check.coverage, 3), "poissonCoverage": round(check.poisson_coverage, 3),
-        "dispersion": round(check.dispersion, 2),
+        "dispersion": round(check.dispersion, 2), "inside": check.inside,
+        # Calibración por franja de probabilidad (de alta a casi nula): lo que dijo el modelo y lo que pasó.
+        "bands": [
+            {"from": b.floor, "cases": b.cases, "predicted": round(b.predicted, 3), "observed": round(b.observed, 3)}
+            for b in check.bands
+        ],
     }
 
 
@@ -203,12 +208,16 @@ def forecast_map_json(fc: ForecastMap) -> dict:
     }
 
 
-def area_forecast_json(area: AreaOfInterest, years: tuple[int, int], months: tuple[MonthForecast, ...]) -> dict:
+def area_forecast_json(area: AreaOfInterest, fc: AreaForecast) -> dict:
+    """Los doce meses con su historia (eventos de ese mes, año por año, desde `years.from`) y la prueba en el área."""
     return {
-        "area": area_json(area), "sensor": FORECAST_SENSOR, "years": _years_json(years), "range": list(FORECAST_RANGE),
+        "area": area_json(area), "sensor": FORECAST_SENSOR, "years": _years_json(fc.years), "range": list(FORECAST_RANGE),
         "months": [
-            {"month": m.month, "expected": round(m.expected, 2), "pAny": round(m.p_any, 3), "low": m.low, "high": m.high,
-             "years": m.years, "yearsWithEvents": m.years_with_events, "overdispersed": m.overdispersed}
-            for m in months
+            {"month": f.month, "expected": round(f.expected, 2), "pAny": round(f.p_any, 3), "low": f.low, "high": f.high,
+             "years": f.years, "yearsWithEvents": f.years_with_events, "overdispersed": f.overdispersed,
+             "history": list(o.history), "inRange": o.in_range, "ifAny": list(o.if_any)}
+            for o in fc.months
+            for f in (o.forecast,)
         ],
+        "check": _check_json(fc.check),
     }

@@ -191,6 +191,13 @@ export interface ForecastCheck {
   poissonCoverage: number;
   /** Mediana de varianza / media (1 = Poisson). */
   dispersion: number;
+  /** Casos dentro del rango del 80 %. */
+  inside: number;
+  /**
+   * Calibración por franja de probabilidad, de alta a casi nula (`from` = 0,67 / 0,33 / 0,05 / 0): la probabilidad
+   * media que dio el modelo y la fracción de casos en que hubo fuego de verdad.
+   */
+  bands: { from: number; cases: number; predicted: number; observed: number }[];
 }
 
 export interface ForecastYears {
@@ -220,6 +227,12 @@ export interface MonthForecast {
   years: number;
   yearsWithEvents: number;
   overdispersed: boolean;
+  /** Eventos de ese mes, año por año, desde `years.from` (los años del ajuste). */
+  history: number[];
+  /** Años de esa historia dentro del rango del 80 %. */
+  inRange: number;
+  /** Rango del 80 % de los eventos si hay al menos uno. */
+  ifAny: [number, number];
 }
 
 export interface AreaForecast {
@@ -227,4 +240,6 @@ export interface AreaForecast {
   years: ForecastYears;
   range: [number, number];
   months: MonthForecast[];
+  /** La prueba fuera de muestra hecha solo en esta área. */
+  check: ForecastCheck | null;
 }

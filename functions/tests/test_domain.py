@@ -100,3 +100,23 @@ def test_verdict_follows_the_percentile():
         AnomalyCategory.ABOVE, AnomalyCategory.ABOVE, AnomalyCategory.WELL_ABOVE, AnomalyCategory.WELL_ABOVE,
     ]
     assert services.anomaly(make_series(first=(2018, 1)), YearMonth(2024, 9)).category is None
+
+
+def test_month_outlook_says_how_many_if_there_is_fire():
+    # Fuego en la mitad de los años, de 1 o 2 eventos: el rango incluye el cero y, si hay fuego, son 1 o 2.
+    outlook = services.month_outlook([0, 1, 0, 2, 0, 1, 0, 1, 0, 2, 1, 0], 8)
+    assert outlook.forecast.low == 0 and outlook.if_any == (1, 2)
+    assert outlook.history[3] == 2 and outlook.in_range == sum(1 for c in outlook.history if c <= outlook.forecast.high)
+    # Sin fuego nunca: probabilidad 0 y nada que contar.
+    quiet = services.month_outlook([0] * 23, 1)
+    assert quiet.forecast.p_any == 0 and quiet.if_any == (0, 0) and quiet.in_range == 23
+
+
+def test_forecast_check_reports_calibration_by_band():
+    # Una unidad con fuego todos los agostos y nunca en enero: lo que dijo y lo que pasó coinciden por franja.
+    counts = {(y, 8): 5 for y in range(2003, 2026)}
+    check = services.forecast_check({"a": counts}, ["a"], (2003, 2020), (2021, 2025))
+    high, none = check.bands[0], check.bands[-1]
+    assert high.floor == 0.67 and high.cases == 5 and high.observed == 1
+    assert none.floor == 0.0 and none.cases == 55 and none.observed == 0
+    assert check.inside == 60

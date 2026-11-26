@@ -71,7 +71,7 @@ jobs:
             --project "$PROJECT_ID" --region "$REGION" \
             --memory 2Gi --cpu 1 --concurrency 40 \
             --min-instances 0 --max-instances 3 --timeout 900 \
-            --update-env-vars "FIRE_TAIL_URI=gs://nasat-fire-calendar-data/tail,FIRE_TAIL_POLL_SECONDS=120" \
+            --update-env-vars "FIRE_TAIL_URI=gs://nasat-fire-calendar-data/tail,FIRE_TAIL_POLL_SECONDS=120,FIRE_PUBLIC_URL=https://nasat.space" \
             --labels "commit-sha=${GITHUB_SHA::12}" \
             --quiet
 

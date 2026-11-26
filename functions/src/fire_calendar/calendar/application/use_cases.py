@@ -11,10 +11,10 @@ from ..domain.model import (
     REFERENCE_START_YEAR,
     ActivityLevels,
     Anomaly,
+    AreaForecast,
     HarmonizedSeries,
     HistoricalMedian,
     ForecastMap,
-    MonthForecast,
     PeakSeason,
     RangeSummary,
     UnitForecast,
@@ -151,8 +151,11 @@ class GetFireForecast:
             self._maps[level] = ForecastMap(level, (first, last), units, check)
         return self._maps[level]
 
-    def for_area(self, area: AreaOfInterest) -> tuple[tuple[int, int], tuple[MonthForecast, ...]]:
+    def for_area(self, area: AreaOfInterest) -> AreaForecast:
+        """Los doce meses del área con su historia, y la misma prueba fuera de muestra hecha solo en esa área."""
         series = self._gateway.monthly_series(area)
         first, last = self._years()
         counts = {(m.period.year, m.period.month): m.events_modis or 0 for m in series.months}
-        return (first, last), services.forecast_months(counts, list(range(first, last + 1)))
+        months = services.area_outlook(counts, list(range(first, last + 1)))
+        check = services.forecast_check({"area": counts}, ["area"], (first, CHECK_TEST_START - 1), (CHECK_TEST_START, last))
+        return AreaForecast((first, last), months, check)

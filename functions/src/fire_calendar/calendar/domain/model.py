@@ -194,6 +194,20 @@ class MonthForecast:
 
 
 @dataclass(frozen=True)
+class MonthOutlook:
+    """La predicción de un mes para un área, con la historia que la respalda.
+
+    Un solo evento puede darse en cualquier parte: por eso, cuando el rango del 80 % incluye el cero, lo que informa
+    es la probabilidad de que haya fuego y cuántos eventos serían si lo hay, no "1 evento esperado".
+    """
+
+    forecast: MonthForecast
+    history: tuple[int, ...]  # eventos de ese mes, año por año, en los años del ajuste
+    in_range: int  # años de esa historia dentro del rango del 80 %
+    if_any: tuple[int, int]  # percentiles 10 y 90 de los eventos si hay al menos uno
+
+
+@dataclass(frozen=True)
 class UnitForecast:
     """Predicción mensual de un límite oficial (departamento, provincia o distrito)."""
 
@@ -201,6 +215,21 @@ class UnitForecast:
     name: str
     parent: str  # jerarquía de arriba abajo: "Departamento" o "Departamento › Provincia"
     months: tuple[MonthForecast, ...]  # enero a diciembre
+
+
+# Franjas de la probabilidad de al menos un evento: alta, media, baja y casi nula. Son las mismas de la web
+# (PROBABILITY_LEVELS en web/src/calendar/ui/riskPanel.ts): si cambia una, cambia la otra.
+PROBABILITY_BANDS = (0.67, 0.33, 0.05, 0.0)
+
+
+@dataclass(frozen=True)
+class BandCheck:
+    """Calibración de una franja: cuando el modelo dio una probabilidad en ella, cuántas veces hubo fuego de verdad."""
+
+    floor: float  # desde (incluido) hasta la franja de arriba
+    cases: int
+    predicted: float  # probabilidad media que dio el modelo
+    observed: float  # fracción de casos con al menos un evento
 
 
 @dataclass(frozen=True)
@@ -215,11 +244,26 @@ class ForecastCheck:
     coverage: float  # fracción de casos que cayeron dentro del rango del 80 %
     poisson_coverage: float  # la misma fracción si el rango fuera Poisson puro
     dispersion: float  # mediana de varianza / media en los meses con fuego (1 = Poisson)
+    bands: tuple[BandCheck, ...] = ()  # de alta a casi nula; solo las franjas con casos
 
     @property
     def skill(self) -> float:
         """Mejora frente a la referencia: 0 = igual, 1 = perfecto."""
         return 1 - self.brier / self.brier_reference if self.brier_reference else 0.0
+
+    @property
+    def inside(self) -> int:
+        """Casos dentro del rango del 80 %."""
+        return round(self.coverage * self.cases)
+
+
+@dataclass(frozen=True)
+class AreaForecast:
+    """Predicción de un área cualquiera: los doce meses con su historia y la prueba fuera de muestra en esa área."""
+
+    years: tuple[int, int]
+    months: tuple[MonthOutlook, ...]  # enero a diciembre
+    check: ForecastCheck | None
 
 
 @dataclass(frozen=True)

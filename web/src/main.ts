@@ -4,7 +4,7 @@ import { COUNTRY, makeBoundingBox, type AreaOfInterest } from './area-of-interes
 import { MapView, type DrawMode } from './area-of-interest/ui/mapView';
 import { CalendarController, type BufferMode, type Changes, type Selection, type ViewData } from './calendar/application/calendarController';
 import { metricLabel, metricValue, type BurnCalendar, type CellCollection, type Measure, type Metric, type PointSample, type Forecast, type RiskLevel } from './calendar/domain/types';
-import { events, impactColor, impactLevel, monthOfYear, percent, probabilityLevel, renderRiskCard, renderRiskLegend, unitsWithin } from './calendar/ui/riskPanel';
+import { forecastTip, impactColor, impactLevel, monthOfYear, probabilityLevel, renderRiskCard, renderRiskLegend, unitsWithin } from './calendar/ui/riskPanel';
 import { renderBeforeAfter, renderFrequencyChart, renderYearDetail, renderYearsChart } from './calendar/ui/charts';
 import { renderFullCalendar, renderHeatmap } from './calendar/ui/heatmap';
 import { renderAbout, renderLevelLegend, renderMonthCard, renderRangeCard, renderRanking, renderRawCard, renderScope, renderStatus, type RankingKey } from './calendar/ui/panels';
@@ -17,6 +17,9 @@ import { areaLabel } from './area-of-interest/domain/area';
 import { HIGH_TONE, LOW_TONE, RAMP, RAMP_INK, quantileBreaks, rampIndex } from './shared/palette';
 import { hexOpacity } from './area-of-interest/ui/mapView';
 import { readUrlState, writeUrlState } from './shared/urlState';
+import type { TourHost } from './sample-case/ui/caseTour';
+import { districtPath } from './district-sheet/domain/sheet';
+import { mapPath, placeTitle } from './area-of-interest/domain/paths';
 
 const controller = new CalendarController();
 // La pestaña del enlace decide el ancho del mapa (Focos crudos no tiene panel): se aplica antes de crear el mapa,
@@ -334,7 +337,8 @@ applyView();
 
 // --- idioma ---------------------------------------------------------------------
 
-byId('langSwitch').addEventListener('click', () => {
+/** Cambia el idioma sin recargar: el botón del encabezado y el de la bienvenida del recorrido. */
+function switchLang(): void {
   setLang(lang() === 'es' ? 'en' : 'es');
   translateDocument();
   paintedCells = null; // la leyenda y las ventanas del mapa llevan texto: se repintan
@@ -344,7 +348,8 @@ byId('langSwitch').addEventListener('click', () => {
   paintThemeButton();
   controller.refresh();
   if (dialog.open) openCalendarDialog();
-});
+}
+byId('langSwitch').addEventListener('click', switchLang);
 
 byId('ramp').append(...RAMP.map((color) => el('span', { style: `background:${color}` })));
 // Leyenda de los hexágonos: los seis pasos de la rampa, con la misma transparencia que en el mapa.
@@ -384,8 +389,9 @@ function paintRisk(fc: Forecast | null, shapes: GeoJSON.FeatureCollection | null
       const p = u.pAny[month - 1]!;
       const impact = impactLevel(u.expected[month - 1]!, p);
       return t('risk.tooltip', {
-        when: monthOfYear(month, year), name: u.name, parent: u.parent ? `${u.parent} · ` : '', e: events(u.expected[month - 1]!),
-        impact: impact ? t(`risk.impact.${impact}` as Key) : t('risk.prob.none'), level: t(`risk.prob.${probabilityLevel(p)}` as Key).toLowerCase(), p: percent(p),
+        when: monthOfYear(month, year), name: u.name, parent: u.parent ? `${u.parent} · ` : '',
+        impact: impact ? t(`risk.impact.${impact}` as Key) : t('risk.prob.none'), level: t(`risk.prob.${probabilityLevel(p)}` as Key).toLowerCase(),
+        tip: forecastTip(u.expected[month - 1]!, p, u.low[month - 1]!),
       });
     },
     (k) => pickUnit(fc.level, k),
@@ -419,6 +425,10 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
     renderAbout(meta);
     byId<HTMLAnchorElement>('dlHotspots').hidden = !meta.hasHotspotPoints;
   }
+  // La ficha imprimible existe para los distritos oficiales: el enlace corto que se comparte.
+  const sheetOpen = byId<HTMLAnchorElement>('sheetOpen');
+  sheetOpen.hidden = selection.area.kind !== 'district';
+  if (selection.area.kind === 'district') sheetOpen.href = districtPath(selection.area, lang());
   if (!calendar || !daily) return;
   const range = controller.range();
 
@@ -516,7 +526,20 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
   }
   byId('legendPoint').hidden = !points?.points.length;
   if (changed.area && changed.map) map.focusArea(selection.area, data.boundary?.geometry ?? null);
-  writeUrlState(selection);
+  writeUrlState(selection, lang(), meta);
+  renderPageHead(selection.area);
+}
+
+/**
+ * Título y dirección canónica de la vista: "Incendios en Sicuani (Canchis, Cusco): …". functions/ escribe lo mismo en
+ * el HTML de cada área (lo que leen los buscadores); aquí se mantiene al cambiar de área o de idioma.
+ */
+function renderPageHead(area: AreaOfInterest): void {
+  const place = placeTitle(area);
+  document.title = place ? t('app.title.place', { place }) : t('app.title');
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  const path = mapPath(area, lang());
+  if (canonical && path && (area.kind !== 'bbox' && area.kind !== 'polygon')) canonical.href = new URL(path, canonical.href).href;
 }
 
 translateDocument();
@@ -552,8 +575,10 @@ paintThemeButton();
 window.addEventListener('resize', () => map.resize());
 // Un enlace compartido pegado en la misma pestaña cambia solo el fragmento: se aplica sin recargar.
 window.addEventListener('hashchange', () => void controller.restore(readUrlState()));
+// Atrás y adelante entre áreas: cada área es una entrada del historial con su propia dirección.
+window.addEventListener('popstate', () => void controller.restore(readUrlState()));
 const initialState = readUrlState();
-void controller.start(initialState);
+const started = controller.start(initialState);
 
 // --- intro: la Tierra en 3D gira y se acerca a Perú ------------------------------
 // Solo en la primera visita de la sesión, sin un área concreta en el enlace y sin "reducir movimiento".
@@ -565,13 +590,68 @@ function introSeen(): boolean {
     return false;
   }
 }
+let introDone: Promise<unknown> = Promise.resolve();
 if (!initialState.area && !introSeen() && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
   try {
     sessionStorage.setItem(INTRO_KEY, '1');
   } catch {
     /* sin almacenamiento: la intro puede repetirse, no pasa nada */
   }
-  import('./area-of-interest/ui/globeIntro')
+  introDone = import('./area-of-interest/ui/globeIntro')
     .then(({ playGlobeIntro }) => playGlobeIntro(document.querySelector<HTMLElement>('.map-wrap')!, map.view()))
     .catch(() => document.querySelector('.globe-intro')?.remove()); // sin la intro, el mapa ya está listo debajo
+}
+
+// --- caso de muestra: el video de 30 s y el recorrido por el incendio de Sicuani ----------
+// Se abre solo en la primera visita a la portada (sin área ni fechas en el enlace), después de la intro del globo:
+// quien llega con un enlace compartido ve esa vista. El botón "Caso Sicuani" del encabezado lo vuelve a abrir.
+const TOUR_KEY = 'nasat-tour-seen';
+function tourSeen(): boolean {
+  try {
+    return localStorage.getItem(TOUR_KEY) === '1';
+  } catch {
+    return true; // sin almacenamiento no se puede recordar: mejor no abrirlo en cada visita
+  }
+}
+const tourHost: TourHost = {
+  controller,
+  revealSections: () => {
+    // El recorrido señala el panel de área y fechas, las estadísticas y la línea de tiempo: se muestran mientras dura.
+    const hidden = [...hiddenSections];
+    const filters = byId<HTMLDetailsElement>('filters');
+    const wasOpen = filters.open;
+    filters.open = true;
+    viewMenu.hidden = true;
+    viewMenuButton.setAttribute('aria-expanded', 'false');
+    if (hidden.length) {
+      hiddenSections.clear();
+      applyView();
+    }
+    return () => {
+      filters.open = wasOpen;
+      if (!hidden.length) return;
+      hidden.forEach((section) => hiddenSections.add(section));
+      applyView();
+    };
+  },
+  frameTimeline: (all) => (all ? brush.showAll() : brush.fitSelection()),
+  switchLang,
+};
+function openTour(): void {
+  try {
+    localStorage.setItem(TOUR_KEY, '1');
+  } catch {
+    /* sin almacenamiento: no se recuerda, y tampoco se abre solo */
+  }
+  import('./sample-case/ui/caseTour')
+    .then(({ startCaseTour }) => startCaseTour(tourHost))
+    .catch(() => undefined); // sin el recorrido la app sigue igual
+}
+byId('tourOpen').addEventListener('click', openTour);
+if (!initialState.area && !initialState.from && !initialState.to && !tourSeen()) {
+  void Promise.all([started, introDone]).then(() => {
+    // Si mientras tanto la persona ya eligió un área o una pestaña, no se le interrumpe.
+    const { area, metric, risk } = controller.selection;
+    if (area.kind === 'country' && metric === 'harmonized' && !risk && !dialog.open) openTour();
+  });
 }
