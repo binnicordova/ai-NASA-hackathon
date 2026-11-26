@@ -10,12 +10,32 @@ import { addDays } from '../../shared/format';
 /** Días que cubre el bloque de focos recientes, contando el último día con datos. */
 export const RECENT_DAYS = 30;
 
-/** El ubigeo de la ficha: de la ruta corta `/d/080601` o, en desarrollo, de `?district=080601`. */
-export function ubigeoFrom(location: Location): string | null {
-  const fromPath = /^\/d\/(\d{6})\/?$/.exec(location.pathname)?.[1];
-  const fromQuery = new URLSearchParams(location.search).get('district');
-  const code = fromPath ?? fromQuery;
+/**
+ * El ubigeo de la ficha: functions/ lo escribe en `<meta name="nasat-district">` (la dirección legible no lo lleva);
+ * en desarrollo, de `?district=080601`.
+ */
+export function ubigeoFrom(document: Document, location: Location): string | null {
+  const served = document.querySelector<HTMLMetaElement>('meta[name="nasat-district"]')?.content;
+  const code = served || new URLSearchParams(location.search).get('district');
   return code && /^\d{6}$/.test(code) ? code : null;
+}
+
+/**
+ * "Huánuco" → "huanuco", "Los Baños del Inca" → "los-banos-del-inca". La misma regla que `slugify` en
+ * functions/src/fire_calendar/district_sheet/interfaces/urls.py: si cambia una, cambia la otra.
+ */
+export function slugify(text: string): string {
+  return text.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Dirección legible de la ficha: `/incendios/cusco/canchis/sicuani` o `/en/wildfires/…`. Sin provincia conocida, el
+ * atajo por ubigeo, que redirige a ella.
+ */
+export function districtPath(area: Extract<AreaOfInterest, { kind: 'district' }>, lang: string): string {
+  if (!area.province) return `/d/${area.ubigeo}${lang === 'en' ? '?lang=en' : ''}`;
+  const section = lang === 'en' ? 'en/wildfires' : 'incendios';
+  return `/${section}/${[area.department, area.province, area.name].map(slugify).join('/')}`;
 }
 
 /** El distrito oficial (INEI) con su provincia y su departamento, o null si el ubigeo no existe. */
@@ -24,8 +44,9 @@ export function districtArea(limits: Limits, ubigeo: string): Extract<AreaOfInte
   return d ? { kind: 'district', ubigeo: d.ubigeo, name: d.name, department: d.department, province: d.province } : null;
 }
 
-/** Enlace corto que se comparte (y que lleva el código QR). En inglés, con `?lang=en`. */
-export const shareUrl = (origin: string, ubigeo: string, lang: string): string => `${origin}/d/${ubigeo}${lang === 'en' ? '?lang=en' : ''}`;
+/** Enlace que se comparte y que lleva el código QR: la dirección legible, en el idioma de la ficha. */
+export const shareUrl = (origin: string, area: Extract<AreaOfInterest, { kind: 'district' }>, lang: string): string =>
+  `${origin}${districtPath(area, lang)}`;
 
 /** Los últimos RECENT_DAYS días con datos. */
 export const recentRange = (lastDate: string): { from: string; to: string } => ({ from: addDays(lastDate, -(RECENT_DAYS - 1)), to: lastDate });

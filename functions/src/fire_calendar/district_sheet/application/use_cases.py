@@ -17,13 +17,24 @@ class GetDistrictSheet:
         self._forecast = forecast
         self._names: dict[str, DistrictName] | None = None
 
-    def district(self, ubigeo: str) -> DistrictName:
-        area = AreaOfInterest.of_district(ubigeo)  # valida el formato
+    def districts(self) -> list[DistrictName]:
+        """Los distritos oficiales del INEI, en el orden del ubigeo."""
         if self._names is None:
             limits = self._gateway.limits() or {"districts": []}
             self._names = {
                 d["ubigeo"]: DistrictName(d["ubigeo"], d["name"], d["province"], d["department"]) for d in limits["districts"]
             }
+        return sorted(self._names.values(), key=lambda d: d.ubigeo)
+
+    def siblings(self, district: DistrictName) -> list[DistrictName]:
+        """Los demás distritos de su provincia (los 4 primeros dígitos del ubigeo), por nombre."""
+        same = [d for d in self.districts() if d.ubigeo[:4] == district.ubigeo[:4] and d.ubigeo != district.ubigeo]
+        return sorted(same, key=lambda d: d.name)
+
+    def district(self, ubigeo: str) -> DistrictName:
+        area = AreaOfInterest.of_district(ubigeo)  # valida el formato
+        self.districts()
+        assert self._names is not None
         name = self._names.get(area.district or "")
         if name is None:
             raise LookupError(f"Distrito desconocido: {ubigeo}")
@@ -34,6 +45,7 @@ class GetDistrictSheet:
         area = AreaOfInterest.of_district(district.ubigeo)
         series = self._gateway.monthly_series(area)
         last_date = self._gateway.date_span()[1]
+        bounds = self._bounds(area)
         forecast = self._forecast.for_area(area)
         months = tuple(o.forecast for o in forecast.months)
         if len(months) != 12:
@@ -45,4 +57,16 @@ class GetDistrictSheet:
             forecast_year=int(last_date[:4]) + 1,
             watch=services.watch_months(months),
             last_date=last_date,
+            first_date=self._gateway.date_span()[0],
+            bounds=bounds,
         )
+
+    def _bounds(self, area: AreaOfInterest) -> tuple[float, float, float, float] | None:
+        """Caja del contorno oficial: oeste, sur, este, norte."""
+        geometry = self._gateway.boundary(area)
+        if not geometry:
+            return None
+        polygons = geometry["coordinates"] if geometry["type"] == "MultiPolygon" else [geometry["coordinates"]]
+        points = [p for polygon in polygons for ring in polygon for p in ring]
+        lons, lats = [p[0] for p in points], [p[1] for p in points]
+        return min(lons), min(lats), max(lons), max(lats)

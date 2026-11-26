@@ -19,9 +19,15 @@ TEXT = {
         "calm": "Fuego casi nulo todos los meses",
         "calendar": "Fuego armonizado por mes, {a}–{b}",
         "data": "Datos de NASA FIRMS hasta el {date}",
-        "title": "{name}: calendario de fuego y meses a vigilar",
-        "desc.watch": "{parents}. En {year}, vigila {months}. Datos de NASA FIRMS hasta el {date}, gratis y sin registro.",
-        "desc.calm": "{parents}. Ningún mes con 5 % o más de probabilidad de fuego. Datos de NASA FIRMS hasta el {date}, gratis y sin registro.",
+        "title": "Incendios en {name} ({province}, {department}): calendario y meses a vigilar",
+        "share": "{name}: calendario de fuego y meses a vigilar",
+        "desc.watch": "{place}: en {year}, vigila {months}. Calendario de focos de calor de NASA FIRMS desde 2000, hasta el {date}. Gratis y sin registro.",
+        "desc.calm": "{place}: ningún mes con 5 % o más de probabilidad de fuego. Calendario de focos de calor de NASA FIRMS desde 2000, hasta el {date}. Gratis y sin registro.",
+        "watch.lead": "Vigila {months}.",
+        "watch.none": "Ningún mes llega al 5 % de probabilidad de fuego.",
+        "nearby": "Más distritos de {province}",
+        "dataset": "Incendios en {name} ({province}, {department}): calendario de focos de calor {a}–{b}",
+        "country": "Perú",
         "and": " y ",
         "missing": "Distrito desconocido",
         "open": "Abrir la ficha",
@@ -32,9 +38,15 @@ TEXT = {
         "calm": "Near-zero chance of fire every month",
         "calendar": "Harmonized fire by month, {a}–{b}",
         "data": "NASA FIRMS data to {date}",
-        "title": "{name}: fire calendar and months to watch",
-        "desc.watch": "{parents}. In {year}, watch {months}. NASA FIRMS data to {date}, free and with no sign-up.",
-        "desc.calm": "{parents}. No month with a 5 % or higher chance of fire. NASA FIRMS data to {date}, free and with no sign-up.",
+        "title": "Wildfires in {name} ({province}, {department}): fire calendar and months to watch",
+        "share": "{name}: fire calendar and months to watch",
+        "desc.watch": "{place}: in {year}, watch {months}. Calendar of NASA FIRMS hot spots since 2000, up to {date}. Free and with no sign-up.",
+        "desc.calm": "{place}: no month with a 5 % or higher chance of fire. Calendar of NASA FIRMS hot spots since 2000, up to {date}. Free and with no sign-up.",
+        "watch.lead": "Watch {months}.",
+        "watch.none": "No month reaches a 5 % chance of fire.",
+        "nearby": "More districts in {province}",
+        "dataset": "Wildfires in {name} ({province}, {department}): hot spot calendar {a}–{b}",
+        "country": "Peru",
         "and": " and ",
         "missing": "Unknown district",
         "open": "Open the sheet",
@@ -57,6 +69,10 @@ def percent(p: float) -> str:
 
 
 def join(items: list[str], lang: str) -> str:
+    """Como Intl.ListFormat en la web: "a, b y c" / "a, b, and c" (la ficha reescribe el mismo texto al cargar)."""
     if len(items) <= 1:
         return "".join(items)
-    return ", ".join(items[:-1]) + TEXT[lang]["and"] + items[-1]
+    head = ", ".join(items[:-1])
+    if lang == "en" and len(items) > 2:
+        head += ","
+    return head + TEXT[lang]["and"] + items[-1]

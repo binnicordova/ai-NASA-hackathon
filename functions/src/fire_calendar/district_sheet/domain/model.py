@@ -38,3 +38,5 @@ class DistrictSheet:
     forecast_year: int  # el año siguiente al último dato, como en la Alerta temprana
     watch: tuple[MonthForecast, ...]  # hasta WATCH_COUNT meses, de enero a diciembre
     last_date: str  # último día con datos (AAAA-MM-DD)
+    first_date: str = ""  # primer día con datos
+    bounds: tuple[float, float, float, float] | None = None  # caja del contorno: oeste, sur, este, norte

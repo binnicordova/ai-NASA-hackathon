@@ -1,5 +1,6 @@
 <!doctype html>
-<!-- Ficha del distrito: siempre en tema claro, porque es una hoja para imprimir. -->
+<!-- Ficha del distrito: siempre en tema claro, porque es una hoja para imprimir. functions/ la sirve en
+     /incendios/<departamento>/<provincia>/<distrito> y escribe en los marcadores ssr el nombre, los meses a vigilar y los distritos vecinos (district_sheet/interfaces/page.py). -->
 <html lang="es" data-theme="light">
 <head>
   <meta charset="utf-8">
@@ -24,8 +25,8 @@
       <img class="sheet-logo" src="/brand/nasat.png" alt="NASAT" width="120" height="40">
       <div class="sheet-id">
         <p class="sheet-kicker" data-i18n="sheet.kicker"></p>
-        <h1 id="sheetName" data-i18n="sheet.loading"></h1>
-        <p class="sheet-parents" id="sheetParents"></p>
+        <h1 id="sheetName"><!--ssr:name--></h1>
+        <p class="sheet-parents" id="sheetParents"><!--ssr:parents--></p>
       </div>
       <p class="sheet-date" id="sheetDate"></p>
     </header>
@@ -41,7 +42,7 @@
 
       <section class="sheet-block" aria-labelledby="sheetForecastTitle">
         <h2 id="sheetForecastTitle"></h2>
-        <p class="sheet-lead" id="sheetWatch"></p>
+        <p class="sheet-lead" id="sheetWatch"><!--ssr:watch--></p>
         <div class="sheet-months" id="sheetMonths" role="img"></div>
         <p class="sheet-tested" id="sheetTested"></p>
         <p class="sheet-note" data-i18n="sheet.forecast.note"></p>
@@ -70,6 +71,8 @@
         <p class="sheet-note" id="sheetMade"></p>
       </div>
     </footer>
+    <!-- Los demás distritos de la provincia, escritos por el servidor: así un buscador llega a todas las fichas. -->
+    <nav class="sheet-nearby" id="sheetNearby"><!--ssr:nearby--></nav>
   </main>
   <script type="module" src="/src/district-sheet/ui/sheetPage.ts"></script>
 </body>

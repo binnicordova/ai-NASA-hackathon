@@ -18,6 +18,7 @@ import { HIGH_TONE, LOW_TONE, RAMP, RAMP_INK, quantileBreaks, rampIndex } from '
 import { hexOpacity } from './area-of-interest/ui/mapView';
 import { readUrlState, writeUrlState } from './shared/urlState';
 import type { TourHost } from './sample-case/ui/caseTour';
+import { districtPath } from './district-sheet/domain/sheet';
 
 const controller = new CalendarController();
 // La pestaña del enlace decide el ancho del mapa (Focos crudos no tiene panel): se aplica antes de crear el mapa,
@@ -426,7 +427,7 @@ function render(selection: Selection, data: ViewData, changed: Changes): void {
   // La ficha imprimible existe para los distritos oficiales: el enlace corto que se comparte.
   const sheetOpen = byId<HTMLAnchorElement>('sheetOpen');
   sheetOpen.hidden = selection.area.kind !== 'district';
-  if (selection.area.kind === 'district') sheetOpen.href = `/d/${selection.area.ubigeo}${lang() === 'en' ? '?lang=en' : ''}`;
+  if (selection.area.kind === 'district') sheetOpen.href = districtPath(selection.area, lang());
   if (!calendar || !daily) return;
   const range = controller.range();
 

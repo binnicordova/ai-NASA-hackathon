@@ -32,19 +32,58 @@ def client() -> TestClient:
 
 
 @needs_data
-def test_share_link_carries_the_district_and_its_months_to_watch(client):
-    page = client.get("/d/080601")
+def test_readable_address_carries_the_district_for_search_and_sharing(client):
+    page = client.get("/incendios/cusco/canchis/sicuani")
     assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
     html = page.text
+    assert "<title>Incendios en Sicuani (Canchis, Cusco): calendario y meses a vigilar · NASAT</title>" in html
+    assert '<link rel="canonical" href="http://testserver/incendios/cusco/canchis/sicuani">' in html
+    assert '<link rel="alternate" hreflang="en" href="http://testserver/en/wildfires/cusco/canchis/sicuani">' in html
     assert '<meta property="og:title" content="Sicuani: calendario de fuego y meses a vigilar">' in html
-    assert "Cusco › Canchis. En 2027, vigila agosto (48 %), setiembre (43 %) y octubre (30 %)." in html
-    assert '/api/v1/preview/district/080601.png?v=' in html and 'og:image:width" content="1200"' in html
-    english = client.get("/d/080601", params={"lang": "en"}).text
-    assert "In 2027, watch August (48 %), September (43 %) and October (30 %)." in english and "&amp;lang=en" in english
-    calm = client.get("/d/150101").text  # Lima: ningún mes llega al 5 %
-    assert "Ningún mes con 5 % o más de probabilidad de fuego" in calm
-    assert client.get("/d/999999").status_code == 404
+    assert "Sicuani (Canchis, Cusco): en 2027, vigila agosto (48\u00a0%), setiembre (43\u00a0%) y octubre (30\u00a0%)." in html
+    assert '/api/v1/preview/district/080601.png?v=' in html and '<meta name="nasat-district" content="080601">' in html
+    # Sin JavaScript ya se lee el nombre, los meses a vigilar, los distritos vecinos y los datos estructurados.
+    assert "Sicuani" in html.split("<h1", 1)[1].split("</h1>", 1)[0]
+    assert '<a href="/incendios/cusco/canchis/san-pablo">San Pablo</a>' in html
+    assert '"@type": "Dataset"' in html and '"identifier": "ubigeo:080601"' in html
+    english = client.get("/en/wildfires/cusco/canchis/sicuani").text
+    assert '<html lang="en"' in english and "Wildfires in Sicuani (Canchis, Cusco)" in english
+    assert "in 2027, watch August (48\u00a0%), September (43\u00a0%), and October (30\u00a0%)." in english
+    calm = client.get("/incendios/lima/lima/lima").text  # Lima: ningún mes llega al 5 %
+    assert "ningún mes con 5 % o más de probabilidad de fuego" in calm
+    assert client.get("/incendios/cusco/canchis/nada").status_code == 404
+
+
+@needs_data
+def test_old_and_odd_addresses_redirect_to_the_readable_one(client):
+    def moved(path: str) -> str:
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 301
+        return response.headers["location"]
+
+    assert moved("/d/080601") == "/incendios/cusco/canchis/sicuani"
+    assert moved("/d/080601?lang=en") == "/en/wildfires/cusco/canchis/sicuani"
+    assert moved("/incendios/Cusco/Canchis/Sicuani") == "/incendios/cusco/canchis/sicuani"
+    assert moved("/incendios/huánuco/huanuco/huanuco") == "/incendios/huanuco/huanuco/huanuco"
+    assert client.get("/d/999999", follow_redirects=False).status_code == 404
     assert client.get("/d/12").status_code == 400
+
+
+@needs_data
+def test_sitemap_lists_every_district_in_both_languages(client):
+    sitemap = client.get("/sitemap.xml")
+    assert sitemap.headers["content-type"].startswith("application/xml")
+    assert sitemap.text.count("<url>") == 1 + 2 * 1890
+    assert "<loc>http://testserver/incendios/cusco/canchis/sicuani</loc>" in sitemap.text
+    robots = client.get("/robots.txt").text
+    assert "Disallow: /api/" in robots and "Allow: /api/v1/preview/" in robots and "Sitemap: http://testserver/sitemap.xml" in robots
+
+
+def test_slugs_are_readable_and_ascii():
+    from fire_calendar.district_sheet.interfaces.urls import slugify
+
+    assert [slugify(x) for x in ("Huánuco", "Los Baños del Inca", "Anco_huallo", "Madre de Dios", "Áncash")] == [
+        "huanuco", "los-banos-del-inca", "anco-huallo", "madre-de-dios", "ancash"]
 
 
 @needs_data

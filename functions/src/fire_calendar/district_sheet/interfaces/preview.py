@@ -42,7 +42,7 @@ def _ramp_index(value: float, breaks: list[float]) -> int:
 
 def _fit(draw: ImageDraw.ImageDraw, text: str, name: str, size: int, width: int, weight: int | None = None) -> ImageFont.FreeTypeFont:
     """La letra más grande (hasta `size`) con la que el texto cabe en `width`."""
-    while size > 28:
+    while size > 18:
         font = _font(name, size, weight)
         if draw.textlength(text, font=font) <= width:
             return font
@@ -86,7 +86,7 @@ def render_preview(sheet: DistrictSheet, tokens: dict[str, str], lang: str, shor
 
     footer = _font("Overpass.ttf", 24, 400)
     draw.text((left, HEIGHT - 110), text["data"].format(date=day_label(sheet.last_date, lang)), font=footer, fill=dim)
-    draw.text((left, HEIGHT - 76), short_url, font=_font("Overpass.ttf", 26, 700), fill=accent)
+    draw.text((left, HEIGHT - 76), short_url, font=_fit(draw, short_url, "Overpass.ttf", 26, WIDTH - left - 420, 700), fill=accent)
 
     # Calendario año × mes, con la rampa de la web: cada fila un año, cada columna un mes.
     months = sheet.series.months

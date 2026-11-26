@@ -27,9 +27,13 @@ interface SheetData {
 
 const listOf = (items: string[]): string => new Intl.ListFormat(locale(), { type: 'conjunction' }).format(items);
 
-/** Mismo texto en pantalla y en la ventana de imprimir: "Sicuani · Ficha del distrito". */
+/**
+ * El título que escribió functions/ es el que leen los buscadores ("Incendios en Sicuani (Canchis, Cusco): …"): se
+ * conserva. Sin él (desarrollo), "Sicuani · NASAT · Ficha del distrito".
+ */
+const servedTitle = document.querySelector('meta[name="nasat-district"]') ? document.title : '';
 function setTitle(name: string | null): void {
-  document.title = name ? `${name} · ${t('sheet.title')}` : t('sheet.title');
+  document.title = servedTitle || (name ? `${name} · ${t('sheet.title')}` : t('sheet.title'));
 }
 
 function renderHeader(data: SheetData): void {
@@ -176,7 +180,7 @@ function renderRecent(data: SheetData): void {
 }
 
 function renderFooter(data: SheetData): void {
-  const url = shareUrl(location.origin, data.area.ubigeo, lang());
+  const url = shareUrl(location.origin, data.area, lang());
   const code = qrcode(0, 'M');
   code.addData(url);
   code.make();
@@ -208,10 +212,19 @@ function showMessage(key: 'sheet.missing' | 'sheet.unknown' | 'api.unreachable',
   byId('sheet').setAttribute('aria-busy', 'false');
 }
 
+/** La página que sirve functions/ ya viene en un idioma (por su dirección): la hoja lo sigue. */
+const servedLang = document.querySelector('meta[name="nasat-district"]') ? document.documentElement.lang : '';
+if (servedLang === 'es' || servedLang === 'en') setLang(servedLang);
+
+/** Cada idioma tiene su dirección: cambiar de idioma es ir a la otra (así lo ve también un buscador). */
+const alternate = (code: string): string | null =>
+  document.querySelector<HTMLLinkElement>(`link[rel="alternate"][hreflang="${code}"]`)?.href ?? null;
+
 async function load(): Promise<void> {
   translateDocument();
   setTitle(null);
-  const ubigeo = ubigeoFrom(location);
+  if (!byId('sheetName').textContent?.trim()) byId('sheetName').textContent = t('sheet.loading');
+  const ubigeo = ubigeoFrom(document, location);
   if (!ubigeo) return showMessage('sheet.missing');
   currentUbigeo = ubigeo;
   const [meta, limits] = await Promise.all([calendarApi.meta(), calendarApi.limits()]);
@@ -228,16 +241,24 @@ async function load(): Promise<void> {
   render(data);
 
   byId('sheetLang').addEventListener('click', () => {
-    setLang(lang() === 'es' ? 'en' : 'es');
+    const next = lang() === 'es' ? 'en' : 'es';
+    const there = alternate(next);
+    if (there) {
+      setLang(next);
+      location.assign(there);
+      return;
+    }
+    setLang(next);
     render(data);
   });
+  sharedArea = area;
 }
 
 byId('sheetPrint').addEventListener('click', () => window.print());
+let sharedArea: SheetData['area'] | null = null;
 byId('sheetShare').addEventListener('click', async () => {
-  const ubigeo = ubigeoFrom(location);
-  if (!ubigeo) return;
-  const url = shareUrl(location.origin, ubigeo, lang());
+  if (!sharedArea) return;
+  const url = shareUrl(location.origin, sharedArea, lang());
   // En el teléfono abre la hoja de compartir (WhatsApp, correo); en la computadora copia el enlace.
   if (navigator.share) {
     await navigator.share({ title: document.title, url }).catch(() => undefined);
