@@ -1,7 +1,7 @@
 import { areaLabel, type AreaOfInterest } from '../../area-of-interest/domain/area';
 import { byId, el } from '../../shared/dom';
 import { addDays, compact, dayLabel, dayNumber, daysBetween, fmt, monthLabel, rangeLabel } from '../../shared/format';
-import { monthNames, t, type Key } from '../../shared/i18n';
+import { locale, monthNames, t, type Key } from '../../shared/i18n';
 import { LEVEL_COLORS, MODIS_ERA, RAMP, VIIRS_ERA } from '../../shared/palette';
 import { type Anomaly, type BurnCalendar, type DailySeries, type DayRange, type EventSummary, type Meta, type PointSummary, type RankingRow } from '../domain/types';
 
@@ -143,7 +143,10 @@ export function renderAbout(meta: Meta | null): void {
   const after = monthly?.['after_harmonized_oos']?.mape_pct;
   setText('validationText', t('ba.text') + (before !== undefined && after !== undefined ? t('ba.validation', { b: before, a: after }) : ''));
   byId('caveats').replaceChildren(...[1, 2, 3, 4, 5, 6].map((n) => el('li', { textContent: t(`caveat.${n}` as Key) })));
-  if (meta) setText('source', t('source', { a: meta.firstDate, b: meta.lastDate }));
+  if (meta) {
+    const when = meta.dataUpdatedAt ? new Date(meta.dataUpdatedAt).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    setText('source', t('source', { a: meta.firstDate, b: meta.lastDate }) + (when ? t('source.updated', { when }) : ''));
+  }
 }
 
 export function renderStatus(loading: boolean, error: string | null): void {

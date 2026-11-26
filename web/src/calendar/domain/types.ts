@@ -86,6 +86,9 @@ export interface Meta {
   caveats: string[];
   validation: Record<string, Record<string, ErrorStats>> | null;
   hasHotspotPoints: boolean;
+  /** Cuándo el proceso automático publicó los datos nuevos (UTC); null si solo se sirve la base. */
+  dataUpdatedAt: string | null;
+  tail: { version: string; cutoff: string; generatedAt: string | null; lastDate: string | null; lastObservation: Record<string, string>; warnings: string[] } | null;
 }
 
 export interface CellProperties {

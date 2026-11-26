@@ -68,7 +68,8 @@ web/  ──►  functions/  ──►  data/  ◄──  src/etl/  ◄──  F
 ```
 
 - `data/`: archivos de FIRMS y lo que produce `src/etl/` en `data/processed/` (versionado en git y copiado a la imagen de Cloud Run). Sin HTTP ni interfaz.
-- `src/etl/`: la ciencia del proyecto. `harmonize_firms.py` (serie armonizada y validación), `fire_events.py` (focos limpios y eventos de fuego por día) y `peru_limits.py` (límites oficiales del INEI y sus celdas H3).
+- `src/etl/`: la ciencia del proyecto. `harmonize_firms.py` (serie armonizada y validación), `fire_events.py` (focos limpios y eventos de fuego por día), `peru_limits.py` (límites oficiales del INEI y sus celdas H3) y `firms_tail.py` (la cola de datos nuevos, ver más abajo).
+- `jobs/tail/` e `infra/`: imagen del job de la cola y `infra/setup.sh`, que crea el bucket, el job, el Scheduler y los permisos en Google Cloud.
 - `functions/`: servicios headless (Python, DuckDB, FastAPI) que leen `data/processed/` y responden JSON/CSV a cualquier cliente. Sin ciencia de armonización y sin interfaz.
 - `web/`: aplicación (Vite, TypeScript, Leaflet). Solo habla con `functions/`.
 - `docs/`: análisis y decisiones. `docs/img/`: capturas del README.
@@ -91,6 +92,17 @@ Reglas que no se rompen:
 - La comparación entre años solo vale con la **actividad armonizada**. Focos, eventos y hexágonos crecen con cada satélite nuevo (2012 S-NPP, 2018 NOAA-20, 2023 NOAA-21); dilo siempre que se muestren.
 - Toda área se **ajusta a la grilla H3 res 6**: cuenta cada celda cuyo centro cae dentro. El departamento de cada celda sale de los límites del INEI al cargar la API; la columna `department` del parquet es aproximada y no se usa para filtrar.
 - Los eventos se asignan a un área por su centroide: en los bordes pueden sumar unos pocos focos de más o de menos que los puntos.
+
+## Datos al día: base + cola
+
+La base de `data/processed/` llega hasta el día anterior al corte de `base_manifest.json` (hoy 2026-11-12); **no se recalcula**. Lo posterior vive en una cola pequeña en `gs://nasat-fire-calendar-data/tail/` que el job `fire-tail` (Cloud Run Job, lanzado por Cloud Scheduler cada 15 min) rehace con `src/etl/firms_tail.py`:
+
+- Mira el ETag de los tres feeds públicos de FIRMS; si no cambiaron (se regeneran una vez por hora), termina. Si cambiaron, pide a la API de área (NRT: MODIS, NOAA-20, NOAA-21) los días desde el corte, **recorta a Perú con las celdas del INEI** (la caja de la API trae vecinos), limpia y armoniza con el mismo código (`harmonize_daily`, `points_frame`, `build_events`) y los factores congelados de `frozen_params.json`, valida y publica `v=<versión>/` y, al final, `latest.json`.
+- `functions/` une base (días < corte) y cola (días ≥ corte) con `FIRE_TAIL_URI` y cambia de gateway en caliente (`ReloadingGateway`, revisa cada 120 s al atender peticiones). Sin la variable, sirve solo la base. `/api/v1/meta` trae `dataUpdatedAt` y `tail`.
+- La `MAP_KEY` vive en Secret Manager (`firms-map-key`), nunca en el repositorio.
+- Si cambias `harmonize_firms.py`, regenera `frozen_params.json` (la corrida completa lo escribe) y comprueba que la reconstrucción completa siga igual a la base.
+- Los últimos ~3 meses son NRT y provisionales: NASA los reemplaza por datos estándar (SP). La cola aún no hace esa restitución: si la ventana NRT deja de cubrir el corte, el job falla a propósito (hay que restituir con SP).
+- Cada celda-día se calcula sola con los factores congelados, así que agregar días no cambia los anteriores (comprobado). Evaluación y números en [`docs/10-automatizacion-datos.md`](docs/10-automatizacion-datos.md).
 
 ## API de `functions/` (prefijo `/api/v1`)
 
@@ -176,7 +188,7 @@ Detalles de implementación que conviene saber:
 
 ## Cómo trabajar
 
-- Pruebas: `cd functions && uv run python -m pytest -q` (27). Web: `cd web && npx tsc --noEmit && npm run build && npm run check:palette`.
+- Pruebas: `cd functions && uv run python -m pytest -q` (38) y, para la cola, `uv run --with pytest --with pandas --with numpy --with scipy --with h3 --with pyarrow pytest src/etl/tests -q` (13). Web: `cd web && npx tsc --noEmit && npm run build && npm run check:palette`.
 - Servidores: `.claude/launch.json` (`fire-calendar` en :8000 y `web-dev` en :5173, que reenvía `/api` a :8000). Si :8000 está ocupado por otra copia del repositorio, añade una configuración temporal en otro puerto (p. ej. :8001, que también sirve `web/dist` compilado), o arranca Vite con `FUNCTIONS_URL=http://127.0.0.1:<puerto>`; deshaz el cambio de `launch.json` antes de confirmar.
 - La API no recarga sola: tras cambiar Python, reinicia el servidor. Tras cambiar `web/`, `npm run build` si la ves servida por la API.
 - Regenerar los límites: `uv run --project functions python src/etl/peru_limits.py` (~35 s). El WFS del INEI rechaza el agente por defecto de curl; el script se identifica como `NASAT-ETL/1.0` y usa los certificados de `certifi`.

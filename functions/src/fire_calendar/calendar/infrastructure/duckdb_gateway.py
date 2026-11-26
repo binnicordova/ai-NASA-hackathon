@@ -20,6 +20,7 @@ import h3
 from fire_calendar.shared.kernel import AreaOfInterest, DayRange, DomainError, YearMonth
 
 from ..domain.model import HarmonizedSeries, MonthlyActivity
+from .tail_source import TailSnapshot
 from ..domain.ports import ActiveCell, DailyActivity, DepartmentTotal, EventSummary, HotspotPoint, HotspotSample, HotspotSummary
 
 _SERIES_CACHE_SIZE = 64
@@ -39,7 +40,7 @@ _EXPORT_SQL = """
 _HOTSPOTS_SQL = """
     select acq_date, acq_time, latitude, longitude, satellite, instrument, confidence, frp, daynight,
            source, cell_id, coalesce(d.department, p.department)
-    from read_parquet(?) p left join cell_dept d on d.h3_res6 = p.cell_id
+    from hotspots p left join cell_dept d on d.h3_res6 = p.cell_id
     where {area} and acq_date between ? and ?
     order by acq_date, acq_time
 """
@@ -49,7 +50,7 @@ _HOTSPOTS_SQL = """
 _POINTS_SQL = """
     select round(longitude, 5), round(latitude, 5), instrument, satellite, acq_date, acq_time, confidence,
            frp, daynight, count(*) over () as total
-    from read_parquet(?)
+    from hotspots
     where {area} and acq_date between ? and ?
     order by acq_date desc, acq_time desc
     limit ?
@@ -64,32 +65,36 @@ class DuckDbHarmonizedSeriesGateway:
         summary_json: Path | None = None,
         hotspots_parquet: Path | None = None,
         limits_json: Path | None = None,
+        tail: TailSnapshot | None = None,
     ) -> None:
+        """`tail` (opcional): días nuevos desde el corte. La base solo aporta los días anteriores al corte."""
         if not harmonized_parquet.exists():
             raise FileNotFoundError(f"No existe la serie armonizada: {harmonized_parquet}")
+        self._tail = tail
         # En contenedores, DUCKDB_MEMORY_LIMIT (p. ej. "1GB") deja margen a Python bajo el límite de la plataforma.
         limit = os.environ.get("DUCKDB_MEMORY_LIMIT")
         self._con = duckdb.connect(config={"memory_limit": limit} if limit else {})
-        self._con.execute(
-            """create table activity as
-               select acq_date, h3_res6, lat_center, lon_center, department, natural_region, instrument,
+        # Solo las columnas que se usan: menos memoria en el servidor.
+        activity_sql, activity_params = self._with_tail(
+            """select acq_date, h3_res6, lat_center, lon_center, department, natural_region, instrument,
                       raw_hotspots_count, harmonized_fire_activity, harmonized_uncertainty_low,
                       harmonized_uncertainty_high, max_frp, is_primary_series, calibration_regime, quality_flag,
                       cast(year as integer) as year, cast(month as integer) as month,
                       cast(substr(acq_date, 9, 2) as integer) as day
-               from read_parquet(?)""",  # solo las columnas que se usan: menos memoria en el servidor
-            [str(harmonized_parquet)],
+               from read_parquet(?, hive_partitioning=false)""",
+            harmonized_parquet, "harmonized_fires",
         )
+        self._con.execute(f"create table activity as {activity_sql}", activity_params)
         self._has_events = bool(events_parquet and events_parquet.exists())
         if self._has_events:
-            self._con.execute(
-                """create table events as
-                   select sensor_set, lat, lon, department, acq_date, h3_res6, n_hotspots, sum_frp,
+            events_sql, events_params = self._with_tail(
+                """select sensor_set, lat, lon, department, acq_date, h3_res6, n_hotspots, sum_frp,
                           cast(substr(acq_date, 1, 4) as integer) as year,
                           cast(substr(acq_date, 6, 2) as integer) as month
-                   from read_parquet(?) where sensor_set in ('all', 'modis')""",
-                [str(events_parquet)],
+                   from read_parquet(?, hive_partitioning=false) where sensor_set in ('all', 'modis')""",
+                events_parquet, "fire_events",
             )
+            self._con.execute(f"create table events as {events_sql}", events_params)
         self._limits = self._load_limits(limits_json)
         # Cada celda, a un solo departamento: el de la celda en la serie, o el oficial del INEI si está cargado.
         self._con.execute("create table cell_dept as select h3_res6, any_value(department) as department from activity group by 1")
@@ -98,11 +103,35 @@ class DuckDbHarmonizedSeriesGateway:
         names = [r[0] for r in self._con.execute("select distinct department from activity").fetchall()]
         self._departments = sorted(names, key=lambda n: unicodedata.normalize("NFKD", n).encode("ascii", "ignore").decode())
         self._summary_json = summary_json
-        # Los focos individuales no se cargan en memoria: se leen del parquet solo al exportar.
-        self._hotspots_parquet = hotspots_parquet if hotspots_parquet and hotspots_parquet.exists() else None
+        # Los focos individuales no se cargan en memoria: la vista `hotspots` lee los parquet al consultar.
+        self._has_hotspots = bool(hotspots_parquet and hotspots_parquet.exists())
+        if self._has_hotspots:
+            base = f"select * from read_parquet({self._literal(hotspots_parquet)}, hive_partitioning=false)"
+            if tail:
+                base = (f"{base} where acq_date < {self._literal(tail.cutoff)} union all "
+                        f"select * from read_parquet({self._literal(tail.file('hotspots_clean'))}, hive_partitioning=false)")
+            self._con.execute(f"create view hotspots as {base}")
         self._series_cache: OrderedDict[AreaOfInterest, HarmonizedSeries] = OrderedDict()
         self._daily_cache: OrderedDict[AreaOfInterest, DailyActivity] = OrderedDict()
         self._boundaries: dict[str, tuple[tuple[float, float], ...]] = {}
+
+    @staticmethod
+    def _literal(value: object) -> str:
+        return "'" + str(value).replace("'", "''") + "'"
+
+    def _with_tail(self, select: str, base: Path, table: str) -> tuple[str, list]:
+        """`select ... from read_parquet(?, hive_partitioning=false)` sobre la base (solo días anteriores al corte) más la cola."""
+        if self._tail is None:
+            return select, [str(base)]
+        joiner = " and " if " where " in select else " where "
+        return (
+            f"{select}{joiner}acq_date < ? union all {select}",
+            [str(base), self._tail.cutoff, str(self._tail.file(table))],
+        )
+
+    def tail_info(self) -> dict | None:
+        """Qué cola está sirviendo este gateway (None si solo la base)."""
+        return None if self._tail is None else self._tail.describe()
 
     # --- filtros de área -------------------------------------------------
 
@@ -311,26 +340,26 @@ class DuckDbHarmonizedSeriesGateway:
         return json.loads(self._summary_json.read_text()).get("validation_metrics")
 
     def has_hotspot_points(self) -> bool:
-        return self._hotspots_parquet is not None
+        return self._has_hotspots
 
     def export_hotspot_rows(self, area: AreaOfInterest, days: DayRange) -> Iterator[tuple]:
-        if self._hotspots_parquet is None:
+        if not self._has_hotspots:
             raise DomainError("Los focos individuales no están disponibles en este despliegue")
         where, params = self._area_sql(area, lon="longitude", lat="latitude", cell="cell_id")
         cursor = self._con.cursor().execute(
             _HOTSPOTS_SQL.format(area=where),
-            [str(self._hotspots_parquet), *params, days.start.isoformat(), days.end.isoformat()],
+            [*params, days.start.isoformat(), days.end.isoformat()],
         )
         while batch := cursor.fetchmany(5000):
             yield from batch
 
     def hotspot_points(self, area: AreaOfInterest, days: DayRange, limit: int) -> HotspotSample:
-        if self._hotspots_parquet is None:
+        if not self._has_hotspots:
             raise DomainError("Los focos individuales no están disponibles en este despliegue")
         where, params = self._area_sql(area, lon="longitude", lat="latitude", cell="cell_id")
         rows = self._query(
             _POINTS_SQL.format(area=where),
-            [str(self._hotspots_parquet), *params, days.start.isoformat(), days.end.isoformat(), limit],
+            [*params, days.start.isoformat(), days.end.isoformat(), limit],
         )
         return HotspotSample(
             total=int(rows[0][-1]) if rows else 0,
@@ -369,8 +398,8 @@ class DuckDbHarmonizedSeriesGateway:
         )
 
     def _hotspot_summary(self, where: str, params: list, days: DayRange) -> HotspotSummary:
-        source = [str(self._hotspots_parquet), *params, days.start.isoformat(), days.end.isoformat()]
-        base = f"from read_parquet(?) where {where} and acq_date between ? and ?"
+        source = [*params, days.start.isoformat(), days.end.isoformat()]
+        base = f"from hotspots where {where} and acq_date between ? and ?"
         groups = self._query(f"select instrument, satellite, daynight, confidence, count(*) {base} group by all", source)
         total, active_days, cells, median, top = self._query(
             f"select count(*), count(distinct acq_date), count(distinct cell_id), median(frp), max(frp) {base}", source
